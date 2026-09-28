@@ -1,25 +1,34 @@
 {
-  "name": "backend",
-  "version": "1.0.0",
-  "description": "Node.js Express backend server",
-  "main": "src/server.js",
+  "name": "moa-supabase-backend",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Supabase Postgres and Edge Functions backend for MOA",
+  "type": "module",
   "scripts": {
-    "admin:check": "node scripts/check-admin-api.js",
-    "admin:sync": "node scripts/sync-admin.js",
-    "db:check": "node scripts/check-database.js",
-    "posts:check": "node scripts/check-post-interactions.js",
-    "dev": "node --watch src/server.js",
-    "start": "node src/server.js"
+    "dev": "npm run functions:serve",
+    "check:env": "node scripts/check-env.mjs",
+    "db:check": "node scripts/check-database.mjs",
+    "db:migrate:sqlite": "node scripts/migrate-sqlite.mjs",
+    "admin:sync": "node scripts/sync-admin.mjs",
+    "supabase:login": "node scripts/supabase-cli.mjs login",
+    "supabase:link": "node scripts/supabase-cli.mjs link",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "db:push": "node scripts/supabase-cli.mjs db-push",
+    "functions:serve": "supabase functions serve api --no-verify-jwt --env-file supabase/functions/.env",
+    "secrets:push": "node scripts/supabase-cli.mjs secrets-push",
+    "functions:deploy": "node scripts/supabase-cli.mjs functions-deploy",
+    "deploy": "node scripts/supabase-cli.mjs deploy"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
+    "@supabase/supabase-js": "2.112.3",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^13.0.3",
     "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "jsonwebtoken": "^9.0.3"
+    "jose": "6.1.0"
+  },
+  "devDependencies": {
+    "supabase": "^2.39.2"
   }
 }

@@ -1,4 +1,9 @@
 const TOKEN_KEY = 'moa_token'
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
+
+export function apiUrl(path) {
+  return `${API_BASE_URL}${path}`
+}
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY)
@@ -14,7 +19,7 @@ export function clearToken() {
 
 export async function api(path, options = {}) {
   const token = getToken()
-  const response = await fetch(`/api${path}`, {
+  const response = await fetch(apiUrl(path), {
     ...options,
     headers: {
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { apiUrl } from '../api'
 
 const menuItems = [
   { id: 'dashboard', icon: '⌂', label: '대시보드' },
@@ -23,9 +24,9 @@ function AdminDashboardPage() {
     const loadDashboard = async () => {
       const headers = { Authorization: `Bearer ${localStorage.getItem('moa_admin_token')}` }
       const [dashboardResponse, postsResponse, commentsResponse] = await Promise.all([
-        fetch('/api/admin/dashboard', { headers }),
-        fetch('/api/admin/posts', { headers }),
-        fetch('/api/admin/comments', { headers }),
+        fetch(apiUrl('/admin/dashboard'), { headers }),
+        fetch(apiUrl('/admin/posts'), { headers }),
+        fetch(apiUrl('/admin/comments'), { headers }),
       ])
       if (dashboardResponse.status === 401 || postsResponse.status === 401 || commentsResponse.status === 401) {
         localStorage.removeItem('moa_admin_token')
@@ -48,7 +49,7 @@ function AdminDashboardPage() {
   const updateVisibility = async (post) => {
     setPostError('')
     try {
-      const response = await fetch(`/api/admin/posts/${post.id}/visibility`, {
+      const response = await fetch(apiUrl(`/admin/posts/${post.id}/visibility`), {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -70,7 +71,7 @@ function AdminDashboardPage() {
     if (!window.confirm(`“${post.title}” 게시글을 관리자 권한으로 삭제할까요?`)) return
     setPostError('')
     try {
-      const response = await fetch(`/api/admin/posts/${post.id}`, {
+      const response = await fetch(apiUrl(`/admin/posts/${post.id}`), {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${localStorage.getItem('moa_admin_token')}` },
       })
@@ -90,7 +91,7 @@ function AdminDashboardPage() {
   const updateCommentVisibility = async (comment) => {
     setCommentError('')
     try {
-      const response = await fetch(`/api/admin/comments/${comment.id}/visibility`, {
+      const response = await fetch(apiUrl(`/admin/comments/${comment.id}/visibility`), {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -110,7 +111,7 @@ function AdminDashboardPage() {
     if (!window.confirm('이 댓글을 관리자 권한으로 삭제할까요?')) return
     setCommentError('')
     try {
-      const response = await fetch(`/api/admin/comments/${comment.id}`, {
+      const response = await fetch(apiUrl(`/admin/comments/${comment.id}`), {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${localStorage.getItem('moa_admin_token')}` },
       })
@@ -147,7 +148,7 @@ function AdminSettings({ admin, onUpdate }) {
     const form = new FormData(event.currentTarget)
 
     try {
-      const response = await fetch('/api/admin/account', {
+      const response = await fetch(apiUrl('/admin/account'), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

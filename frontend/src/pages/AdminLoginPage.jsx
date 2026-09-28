@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { apiUrl } from '../api'
 
 function AdminLoginPage() {
   const navigate = useNavigate()
@@ -13,7 +14,7 @@ function AdminLoginPage() {
     const form = new FormData(event.currentTarget)
 
     try {
-      const response = await fetch('/api/admin/login', {
+      const response = await fetch(apiUrl('/admin/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: form.get('email'), password: form.get('password') }),

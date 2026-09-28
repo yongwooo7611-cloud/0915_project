@@ -4,3 +4,8 @@ npm-debug.log*
 data/*.db
 data/*.db-shm
 data/*.db-wal
+.branches/
+.temp/
+supabase/.env
+supabase/.env.local
+supabase/functions/.env

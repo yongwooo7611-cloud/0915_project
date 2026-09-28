@@ -1,0 +1,11 @@
+{
+  "imports": {
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.112.3",
+    "bcryptjs": "npm:bcryptjs@3.0.3",
+    "jose": "npm:jose@6.1.0"
+  },
+  "compilerOptions": {
+    "strict": true,
+    "lib": ["deno.ns", "dom", "dom.iterable"]
+  }
+}
