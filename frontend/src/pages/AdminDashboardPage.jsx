@@ -14,8 +14,10 @@ function AdminDashboardPage() {
   const navigate = useNavigate()
   const [activeMenu, setActiveMenu] = useState('dashboard')
   const [dashboard, setDashboard] = useState({ stats: { users: 0, posts: 0, comments: 0, views: 0 }, recentPosts: [] })
+  const [members, setMembers] = useState([])
   const [adminPosts, setAdminPosts] = useState([])
   const [adminComments, setAdminComments] = useState([])
+  const [memberError, setMemberError] = useState('')
   const [postError, setPostError] = useState('')
   const [commentError, setCommentError] = useState('')
   const [admin, setAdmin] = useState(() => JSON.parse(localStorage.getItem('moa_admin') || '{}'))
@@ -23,17 +25,24 @@ function AdminDashboardPage() {
   useEffect(() => {
     const loadDashboard = async () => {
       const headers = { Authorization: `Bearer ${localStorage.getItem('moa_admin_token')}` }
-      const [dashboardResponse, postsResponse, commentsResponse] = await Promise.all([
+      const [dashboardResponse, membersResponse, postsResponse, commentsResponse] = await Promise.all([
         fetch(apiUrl('/admin/dashboard'), { headers }),
+        fetch(apiUrl('/admin/users'), { headers }),
         fetch(apiUrl('/admin/posts'), { headers }),
         fetch(apiUrl('/admin/comments'), { headers }),
       ])
-      if (dashboardResponse.status === 401 || postsResponse.status === 401 || commentsResponse.status === 401) {
+      if ([dashboardResponse, membersResponse, postsResponse, commentsResponse].some((response) => response.status === 401)) {
         localStorage.removeItem('moa_admin_token')
         navigate('/admin/login', { replace: true })
         return
       }
       if (dashboardResponse.ok) setDashboard(await dashboardResponse.json())
+      if (membersResponse.ok) {
+        setMembers((await membersResponse.json()).users)
+      } else {
+        const data = await membersResponse.json().catch(() => ({}))
+        setMemberError(data.message || '회원 목록을 불러오지 못했습니다.')
+      }
       if (postsResponse.ok) setAdminPosts((await postsResponse.json()).posts)
       if (commentsResponse.ok) setAdminComments((await commentsResponse.json()).comments)
     }
@@ -126,7 +135,7 @@ function AdminDashboardPage() {
 
   const renderContent = () => {
     if (activeMenu === 'dashboard') return <DashboardOverview dashboard={dashboard} />
-    if (activeMenu === 'members') return <ManagementPanel title="회원 관리" description="가입 회원과 활동 상태를 관리합니다."><div className="admin-empty"><span>♙</span><h3>등록 회원 {dashboard.stats.users}명</h3><p>회원 데이터가 쌓이면 이곳에서 검색하고 관리할 수 있습니다.</p></div></ManagementPanel>
+    if (activeMenu === 'members') return <ManagementPanel title="회원 관리" description="일반 사용자와 관리자를 한눈에 확인합니다.">{memberError && <p className="admin-error">{memberError}</p>}<AdminMemberTable members={members} /></ManagementPanel>
     if (activeMenu === 'posts') return <ManagementPanel title="게시글 관리" description="사용자가 작성한 전체 게시글을 확인하고 관리합니다.">{postError && <p className="admin-error">{postError}</p>}<AdminPostTable posts={adminPosts} onToggleVisibility={updateVisibility} onDelete={deleteAdminPost} showUserEmail /></ManagementPanel>
     if (activeMenu === 'comments') return <ManagementPanel title="댓글 관리" description="전체 댓글을 숨김 또는 삭제할 수 있습니다.">{commentError && <p className="admin-error">{commentError}</p>}<AdminCommentTable comments={adminComments} onToggleVisibility={updateCommentVisibility} onDelete={deleteAdminComment} /></ManagementPanel>
     return <ManagementPanel title="환경 설정" description="관리자 계정과 커뮤니티 운영 환경을 설정합니다."><AdminSettings admin={admin} onUpdate={setAdmin} /></ManagementPanel>
@@ -192,6 +201,10 @@ function DashboardOverview({ dashboard }) {
 
 function ManagementPanel({ title, description, children }) {
   return <><div className="admin-welcome"><div><p>MANAGEMENT</p><h1>{title}</h1></div><span>{description}</span></div><section className="admin-panel admin-management">{children}</section></>
+}
+
+function AdminMemberTable({ members }) {
+  return <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>이름</th><th>닉네임</th><th>이메일</th><th>구분</th><th>가입일</th></tr></thead><tbody>{members.map((member) => <tr key={`${member.role}-${member.id}`}><td><strong>{member.name}</strong></td><td>{member.nickname || '-'}</td><td>{member.email}</td><td><span className={`admin-role ${member.role}`}>{member.role === 'admin' ? '관리자' : '일반 사용자'}</span></td><td>{member.created_at?.slice(0, 10)}</td></tr>)}</tbody></table>{members.length === 0 && <p className="list-empty">등록된 회원이 없습니다.</p>}</div>
 }
 
 function AdminCommentTable({ comments, onToggleVisibility, onDelete }) {

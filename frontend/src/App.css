@@ -262,6 +262,7 @@
 .admin-table { width: 100%; border-collapse: collapse; margin-top: 13px; font-size: 10px; }
 .admin-table th { padding: 11px 17px; color: #9aa39e; background: #fafbfa; font-weight: 600; text-align: left; white-space: nowrap; }.admin-table td { padding: 13px 17px; border-top: 1px solid #edf0ee; color: #737f78; white-space: nowrap; }.admin-table td:first-child { max-width: 320px; color: #313d36; overflow: hidden; text-overflow: ellipsis; }.admin-table td button { border: 0; background: none; color: #9ca59f; }
 .admin-category { padding: 4px 8px; border-radius: 10px; color: #536c5e; background: #edf3ef; }.admin-status { color: #3e8c62; }.admin-status::before { content: ''; width: 5px; height: 5px; display: inline-block; margin-right: 5px; border-radius: 50%; background: #55a175; }
+.admin-role { display: inline-flex; align-items: center; padding: 4px 9px; border-radius: 12px; color: #536c5e; background: #edf3ef; font-weight: 700; }.admin-role.admin { color: #6b4fa0; background: #f0ebf8; }
 .admin-status.hidden { color: #9b5d5d; }.admin-status.hidden::before { background: #c97878; }
 .admin-row-actions { display: flex; gap: 6px; }.admin-table td .admin-row-actions button { padding: 5px 8px; border: 1px solid #dce3df; border-radius: 6px; color: #47705b; background: white; font-size: 9px; }.admin-table td .admin-row-actions button.danger { color: #a84646; border-color: #efd0d0; }
 .admin-management { min-height: 430px; padding: 10px 0; }

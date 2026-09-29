@@ -64,6 +64,21 @@ export async function adminRoutes(request: Request, path: string): Promise<Respo
     return json(request, { admin: session, stats: { users, posts, comments, views }, recentPosts: recent.data || [] })
   }
 
+  if (request.method === 'GET' && path === '/admin/users') {
+    const [usersResult, adminsResult] = await Promise.all([
+      db.from('users').select('id,email,name,nickname,created_at,updated_at'),
+      db.from('admins').select('id,email,name,created_at,updated_at'),
+    ])
+    assertDatabase(usersResult.error); assertDatabase(adminsResult.error)
+
+    const users = [
+      ...(usersResult.data || []).map((user) => ({ ...user, role: 'user' as const })),
+      ...(adminsResult.data || []).map((admin) => ({ ...admin, nickname: null, role: 'admin' as const })),
+    ].sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
+
+    return json(request, { users })
+  }
+
   if (request.method === 'GET' && path === '/admin/posts') {
     const result = await db.from('post_summaries').select('id,title,category,content,view_count,is_hidden,created_at,updated_at,user_id,author,author_email,comment_count').order('created_at', { ascending: false })
     assertDatabase(result.error)
