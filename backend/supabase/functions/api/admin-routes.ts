@@ -66,14 +66,14 @@ export async function adminRoutes(request: Request, path: string): Promise<Respo
 
   if (request.method === 'GET' && path === '/admin/users') {
     const [usersResult, adminsResult] = await Promise.all([
-      db.from('users').select('id,email,name,nickname,created_at,updated_at'),
+      db.from('user_details').select('id,email,name,nickname,profile_id,created_at,updated_at'),
       db.from('admins').select('id,email,name,created_at,updated_at'),
     ])
     assertDatabase(usersResult.error); assertDatabase(adminsResult.error)
 
     const users = [
       ...(usersResult.data || []).map((user) => ({ ...user, role: 'user' as const })),
-      ...(adminsResult.data || []).map((admin) => ({ ...admin, nickname: null, role: 'admin' as const })),
+      ...(adminsResult.data || []).map((admin) => ({ ...admin, nickname: null, profile_id: null, role: 'admin' as const })),
     ].sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
 
     return json(request, { users })

@@ -7,7 +7,7 @@ import { formatDate } from '../utils'
 function PostDetailPage() {
   const { postId } = useParams()
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const [post, setPost] = useState(null)
   const [comments, setComments] = useState([])
   const [loading, setLoading] = useState(true)
@@ -138,13 +138,13 @@ function PostDetailPage() {
     </article>
     <section className="comments">
       <h2>댓글 <span>{comments.length}</span></h2>
-      <form className="comment-form" onSubmit={submitComment}><textarea name="content" aria-label="댓글 내용" placeholder={user ? '따뜻한 댓글을 남겨 주세요.' : '댓글을 쓰려면 로그인해 주세요.'} rows="3" maxLength="2000" required></textarea><button type="submit" className="button button-small" disabled={commentSubmitting}>{commentSubmitting ? '등록 중...' : '댓글 등록'}</button></form>
+      {authLoading ? <div className="comment-login-prompt">로그인 정보를 확인하는 중입니다.</div> : user ? <form className="comment-form" onSubmit={submitComment}><textarea name="content" aria-label="댓글 내용" placeholder="따뜻한 댓글을 남겨 주세요." rows="3" maxLength="2000" required></textarea><button type="submit" className="button button-small" disabled={commentSubmitting}>{commentSubmitting ? '등록 중...' : '댓글 등록'}</button></form> : <div className="comment-login-prompt"><span>댓글을 작성하려면 로그인이 필요합니다.</span><Link to="/login" className="button button-small">로그인</Link></div>}
       {commentError && <p className="form-error">{commentError}</p>}
       <div>{comments.map((comment) => <div className="comment" key={comment.id}>
         <span className="mini-avatar">{comment.author[0]}</span>
         <div className="comment-body"><div className="comment-heading"><div><strong>{comment.author}</strong><span>{formatDate(comment.createdAt)}{comment.updatedAt !== comment.createdAt ? ' · 수정됨' : ''}</span></div>{user?.id === comment.userId && editingId !== comment.id && <div className="comment-actions"><button type="button" onClick={() => { setEditingId(comment.id); setEditingContent(comment.content) }}>수정</button><button type="button" className="danger" onClick={() => deleteComment(comment)}>삭제</button></div>}</div>
         {editingId === comment.id ? <div className="comment-edit"><textarea value={editingContent} onChange={(event) => setEditingContent(event.target.value)} rows="3" maxLength="2000" /><div><button type="button" className="button button-small" disabled={!editingContent.trim()} onClick={() => updateComment(comment.id)}>저장</button><button type="button" className="button button-small button-secondary" onClick={() => setEditingId(null)}>취소</button></div></div> : <p>{comment.content}</p>}</div>
-      </div>)}</div>
+      </div>)}{comments.length === 0 && <p className="comments-empty">아직 댓글이 없습니다. 첫 댓글을 남겨 주세요.</p>}</div>
     </section>
   </section>
 }

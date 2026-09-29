@@ -4,7 +4,7 @@
 
 ## 구조
 
-- `supabase/migrations`: 테이블, 인덱스, RLS, 집계 뷰, 원자적 조회수/반응 RPC
+- `supabase/migrations`: 관리자, 사용자 계정, 프로필, 콘텐츠 테이블과 인덱스, RLS, 집계 뷰, 원자적 조회수/반응 RPC
 - `supabase/functions/api`: 인증, 게시글, 댓글, 관리자 Edge API
 - `supabase/functions/_shared`: 환경변수, Supabase 클라이언트, JWT, CORS, HTTP 공통 코드
 - `scripts/sync-admin.mjs`: 관리자 계정 생성 또는 갱신

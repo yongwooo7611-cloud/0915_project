@@ -25,7 +25,16 @@ async function upsert(table, values, onConflict = 'id') {
 
 try {
   await upsert('admins', rows('admins'))
-  await upsert('users', rows('users'))
+  const legacyUsers = rows('users')
+  await upsert('users', legacyUsers.map(({ name: _name, nickname: _nickname, bio: _bio, ...user }) => user))
+  await upsert('profiles', legacyUsers.map((user) => ({
+    user_id: user.id,
+    name: user.name,
+    nickname: user.nickname,
+    bio: user.bio || '',
+    created_at: user.created_at,
+    updated_at: user.updated_at,
+  })), 'user_id')
   await upsert('posts', rows('posts').map((row) => ({ ...row, is_hidden: Boolean(row.is_hidden) })))
   await upsert('comments', rows('comments').map((row) => ({ ...row, is_hidden: Boolean(row.is_hidden) })))
   await upsert('post_reactions', rows('post_reactions'), 'post_id,user_id')
