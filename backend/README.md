@@ -7,7 +7,7 @@
 - `supabase/migrations`: 관리자, 사용자 계정, 프로필, 콘텐츠 테이블과 인덱스, RLS, 집계 뷰, 원자적 조회수/반응 RPC
 - `supabase/functions/api`: 인증, 게시글, 댓글, 관리자 Edge API
 - `supabase/functions/_shared`: 환경변수, Supabase 클라이언트, JWT, CORS, HTTP 공통 코드
-- `scripts/sync-admin.mjs`: 관리자 계정 생성 또는 갱신
+- `scripts/sync-admin.mjs`: 관리자 계정을 Supabase Auth와 `admins` 테이블에 생성 또는 갱신
 - `scripts/migrate-sqlite.mjs`: 기존 SQLite 데이터를 Supabase로 일회성 이전
 
 모든 테이블은 RLS가 활성화되어 있으며 `anon`과 `authenticated`의 직접 접근 권한은 제거했습니다. 공개 API도 Edge Function에서 검증한 뒤 비공개 키로만 데이터에 접근합니다.

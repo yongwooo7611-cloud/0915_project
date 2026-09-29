@@ -1,9 +1,9 @@
 import bcrypt from 'bcryptjs'
-import { db, assertDatabase } from '../_shared/database.ts'
+import { auth, db, assertDatabase } from '../_shared/database.ts'
 import { requireSession, signSession } from '../_shared/auth.ts'
 import { bodyJson, HttpError, json, positiveId } from '../_shared/http.ts'
 
-type AdminRow = { id: number; email: string; password_hash: string; name: string }
+type AdminRow = { id: number; auth_user_id: string; email: string; password_hash: string; name: string }
 
 function publicAdmin(admin: AdminRow) {
   return { id: admin.id, email: admin.email, name: admin.name, role: 'admin' as const }
@@ -20,12 +20,12 @@ export async function adminRoutes(request: Request, path: string): Promise<Respo
     const body = await bodyJson(request)
     const email = String(body.email || '').trim().toLowerCase()
     const password = String(body.password || '')
-    const { data, error } = await db.from('admins').select('*').eq('email', email).maybeSingle()
+    const signedIn = await auth.auth.signInWithPassword({ email, password })
+    if (signedIn.error || !signedIn.data.user) throw new HttpError(401, '이메일 또는 비밀번호가 올바르지 않습니다.')
+    const { data, error } = await db.from('admins').select('*').eq('auth_user_id', signedIn.data.user.id).maybeSingle()
     assertDatabase(error)
     const record = data as AdminRow | null
-    if (!record || !(await bcrypt.compare(password, record.password_hash))) {
-      throw new HttpError(401, '이메일 또는 비밀번호가 올바르지 않습니다.')
-    }
+    if (!record) throw new HttpError(403, '관리자 권한이 없는 계정입니다.')
     const admin = publicAdmin(record)
     return json(request, { token: await signSession(admin), admin })
   }
@@ -42,9 +42,26 @@ export async function adminRoutes(request: Request, path: string): Promise<Respo
     const found = await db.from('admins').select('*').eq('id', session.id).maybeSingle()
     assertDatabase(found.error)
     const record = found.data as AdminRow | null
-    if (!record || !(await bcrypt.compare(currentPassword, record.password_hash))) throw new HttpError(401, '현재 비밀번호가 올바르지 않습니다.')
+    if (!record?.auth_user_id) throw new HttpError(409, 'Supabase Auth에 연결되지 않은 관리자 계정입니다.')
+    const verified = await auth.auth.signInWithPassword({ email: record.email, password: currentPassword })
+    if (verified.error || verified.data.user?.id !== record.auth_user_id) throw new HttpError(401, '현재 비밀번호가 올바르지 않습니다.')
     if (!name || !email) throw new HttpError(400, '이름과 이메일을 입력해 주세요.')
     if (newPassword && newPassword.length < 8) throw new HttpError(400, '새 비밀번호는 8자 이상이어야 합니다.')
+    const duplicate = await db.from('admins').select('id').eq('email', email).neq('id', record.id).limit(1)
+    assertDatabase(duplicate.error)
+    if (duplicate.data?.length) throw new HttpError(409, '이미 사용 중인 이메일입니다.')
+
+    const authUpdate = await db.auth.admin.updateUserById(record.auth_user_id, {
+      email,
+      ...(newPassword ? { password: newPassword } : {}),
+      email_confirm: true,
+      user_metadata: { name, role: 'admin' },
+      app_metadata: { role: 'admin' },
+    })
+    if (authUpdate.error) {
+      if (authUpdate.error.message.toLowerCase().includes('already')) throw new HttpError(409, '이미 사용 중인 이메일입니다.')
+      throw new Error('Supabase 관리자 계정 정보를 변경하지 못했습니다.')
+    }
     const password_hash = newPassword ? await bcrypt.hash(newPassword, 12) : record.password_hash
     const updated = await db.from('admins').update({ name, email, password_hash }).eq('id', record.id).select('*').single()
     if (updated.error?.code === '23505') throw new HttpError(409, '이미 사용 중인 이메일입니다.')
