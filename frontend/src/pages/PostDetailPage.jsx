@@ -29,17 +29,17 @@ function PostDetailPage() {
   useEffect(loadPost, [loadPost])
 
   useEffect(() => {
-    if (!user) return
+    if (!user || loading || String(post?.id) !== postId) return
 
-    const storageKey = `moa_viewed_post:${user.id}:${postId}`
-    if (localStorage.getItem(storageKey)) return
-
-    // Mark before the request so React StrictMode cannot send the same view twice.
-    localStorage.setItem(storageKey, new Date().toISOString())
+    let cancelled = false
     api(`/posts/${postId}/view`, { method: 'POST' })
-      .then((data) => setPost((current) => current ? { ...current, views: data.views } : current))
-      .catch(() => localStorage.removeItem(storageKey))
-  }, [postId, user])
+      .then((data) => {
+        if (!cancelled) setPost((current) => current ? { ...current, views: data.views } : current)
+      })
+      .catch(() => {})
+
+    return () => { cancelled = true }
+  }, [postId, post?.id, user, loading])
 
   const reactToPost = async (reaction) => {
     if (!user) {
