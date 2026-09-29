@@ -23,11 +23,10 @@
 - `SUPABASE_SECRET_KEY`: 서버 전용 비공개 키(`sb_secret_...`)
 - `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`: 레거시 키를 사용하는 프로젝트의 대체 변수
 - `SUPABASE_ACCESS_TOKEN`: Supabase CLI 로그인 토큰
-- `VERCEL_TOKEN` 또는 `VERCEL_ACCESS_TOKEN`: Vercel CLI/API 토큰
 - `USER_JWT_SECRET`, `ADMIN_JWT_SECRET`: 서로 다른 32자 이상의 앱 토큰 서명키
 - `CORS_ORIGINS`: 쉼표로 구분한 Vercel 및 로컬 프런트 주소
 
-`SUPABASE_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ACCESS_TOKEN`, `VERCEL_TOKEN`은 절대로 `VITE_` 접두사를 붙이거나 프런트 환경변수에 넣지 마세요.
+`SUPABASE_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ACCESS_TOKEN`은 절대로 `VITE_` 접두사를 붙이거나 프런트 환경변수에 넣지 마세요.
 
 ## 2. 설치 및 프로젝트 연결
 
@@ -55,8 +54,8 @@ npm run admin:sync
 npm run db:check
 ```
 
-`SUPABASE_URL`과 Supabase 프로젝트 키는 배포된 Edge Function에 기본 제공됩니다. CLI용 `SUPABASE_ACCESS_TOKEN`과 `VERCEL_TOKEN`은 Edge Function secret으로 업로드하지 않습니다.
-전체 과정을 한 번에 실행하려면 `npm run deploy`를 사용할 수 있습니다.
+`SUPABASE_URL`과 Supabase 프로젝트 키는 배포된 Edge Function에 기본 제공됩니다. CLI용 `SUPABASE_ACCESS_TOKEN`은 Edge Function secret으로 업로드하지 않습니다.
+전체 Supabase 배포 과정을 한 번에 실행하려면 `npm run deploy`를 사용할 수 있습니다. 이 명령은 Vercel을 배포하지 않습니다.
 
 ## 4. 기존 SQLite 데이터 이전(선택)
 
@@ -81,7 +80,18 @@ npm run functions:serve
 
 로컬 API URL은 `http://localhost:54321/functions/v1/api`입니다. 프런트 Vite 프록시는 `/api`를 이 주소로 전달합니다.
 
-## 6. Vercel 프런트 연결
+## 6. GitHub 기반 Vercel 프런트 배포
+
+Vercel 프로젝트는 GitHub 저장소와 직접 연결합니다.
+
+```text
+Repository: yongwooo7611-cloud/0915_project
+Production Branch: main
+Root Directory: frontend
+Framework Preset: Vite
+```
+
+`main` 브랜치에 커밋을 푸시하면 Vercel Git 연동이 운영 배포를 자동 생성합니다. 프런트 배포에 Vercel CLI나 `VERCEL_TOKEN`을 사용하지 않습니다. Pull Request 브랜치는 Vercel 미리보기 배포로 처리합니다.
 
 Vercel 프로젝트에 다음 환경변수를 추가하고 프런트를 다시 배포합니다.
 
