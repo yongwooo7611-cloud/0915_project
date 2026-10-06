@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiUrl } from '../api'
+import { getTokenExpiration } from '../session'
 
 const menuItems = [
   { id: 'dashboard', icon: '⌂', label: '대시보드' },
@@ -13,7 +14,14 @@ const menuItems = [
 function AdminDashboardPage() {
   const navigate = useNavigate()
   const [activeMenu, setActiveMenu] = useState('dashboard')
-  const [dashboard, setDashboard] = useState({ stats: { users: 0, posts: 0, comments: 0, views: 0 }, recentPosts: [] })
+  const [dashboard, setDashboard] = useState({
+    stats: { users: 0, posts: 0, comments: 0, views: 0 },
+    changes: { users: 0, posts: 0, comments: 0, views: 0 },
+    weeklyActivity: [],
+    categoryDistribution: [],
+    recentPosts: [],
+    generatedAt: null,
+  })
   const [members, setMembers] = useState([])
   const [adminPosts, setAdminPosts] = useState([])
   const [adminComments, setAdminComments] = useState([])
@@ -23,6 +31,14 @@ function AdminDashboardPage() {
   const [admin, setAdmin] = useState(() => JSON.parse(localStorage.getItem('moa_admin') || '{}'))
 
   useEffect(() => {
+    const token = localStorage.getItem('moa_admin_token')
+    const expiresAt = getTokenExpiration(token)
+    const expirationTimer = window.setTimeout(() => {
+      localStorage.removeItem('moa_admin_token')
+      localStorage.removeItem('moa_admin')
+      navigate('/admin/login', { replace: true })
+    }, Math.max(0, expiresAt - Date.now()))
+
     const loadDashboard = async () => {
       const headers = { Authorization: `Bearer ${localStorage.getItem('moa_admin_token')}` }
       const [dashboardResponse, membersResponse, postsResponse, commentsResponse] = await Promise.all([
@@ -47,6 +63,7 @@ function AdminDashboardPage() {
       if (commentsResponse.ok) setAdminComments((await commentsResponse.json()).comments)
     }
     loadDashboard().catch(() => {})
+    return () => window.clearTimeout(expirationTimer)
   }, [navigate])
 
   const logout = () => {
@@ -141,7 +158,8 @@ function AdminDashboardPage() {
     return <ManagementPanel title="환경 설정" description="관리자 계정과 커뮤니티 운영 환경을 설정합니다."><AdminSettings admin={admin} onUpdate={setAdmin} /></ManagementPanel>
   }
 
-  return <div className="admin-shell"><aside className="admin-sidebar"><div className="admin-sidebar-brand"><span>M</span><div>MOA<small>ADMIN CONSOLE</small></div></div><nav>{menuItems.map((item) => <button type="button" className={activeMenu === item.id ? 'active' : ''} onClick={() => setActiveMenu(item.id)} key={item.id}><span>{item.icon}</span>{item.label}</button>)}</nav><div className="admin-sidebar-footer"><div className="admin-user-avatar">{admin.name?.[0] || '관'}</div><div><strong>{admin.name || '관리자'}</strong><small>{admin.email}</small></div><button type="button" onClick={logout} aria-label="로그아웃">↗</button></div></aside><main className="admin-main"><header className="admin-topbar"><div><span>{menuItems.find((item) => item.id === activeMenu)?.label}</span><small>2026년 9월 15일 화요일</small></div><button type="button" className="admin-notification" aria-label="알림">●</button></header><div className="admin-content">{renderContent()}</div></main></div>
+  const todayLabel = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'full' }).format(new Date())
+  return <div className="admin-shell"><aside className="admin-sidebar"><div className="admin-sidebar-brand"><span>M</span><div>MOA<small>ADMIN CONSOLE</small></div></div><nav>{menuItems.map((item) => <button type="button" className={activeMenu === item.id ? 'active' : ''} onClick={() => setActiveMenu(item.id)} key={item.id}><span>{item.icon}</span>{item.label}</button>)}</nav><div className="admin-sidebar-footer"><div className="admin-user-avatar">{admin.name?.[0] || '관'}</div><div><strong>{admin.name || '관리자'}</strong><small>{admin.email}</small></div><button type="button" onClick={logout} aria-label="로그아웃">↗</button></div></aside><main className="admin-main"><header className="admin-topbar"><div><span>{menuItems.find((item) => item.id === activeMenu)?.label}</span><small>{todayLabel}</small></div><button type="button" className="admin-notification" aria-label="알림">●</button></header><div className="admin-content">{renderContent()}</div></main></div>
 }
 
 function AdminSettings({ admin, onUpdate }) {
@@ -190,13 +208,25 @@ function AdminSettings({ admin, onUpdate }) {
 
 function DashboardOverview({ dashboard }) {
   const stats = [
-    { label: '전체 회원', value: dashboard.stats.users, change: '+8.2%', color: 'mint' },
-    { label: '전체 게시글', value: dashboard.stats.posts, change: '+12.5%', color: 'violet' },
-    { label: '전체 댓글', value: dashboard.stats.comments, change: '+5.4%', color: 'orange' },
-    { label: '오늘 조회수', value: dashboard.stats.views, change: '+18.1%', color: 'blue' },
+    { key: 'users', label: '전체 회원', value: dashboard.stats.users, color: 'mint', comparison: '지난달 말 대비' },
+    { key: 'posts', label: '전체 게시글', value: dashboard.stats.posts, color: 'violet', comparison: '지난달 말 대비' },
+    { key: 'comments', label: '전체 댓글', value: dashboard.stats.comments, color: 'orange', comparison: '지난달 말 대비' },
+    { key: 'views', label: '오늘 조회수', value: dashboard.stats.views, color: 'blue', comparison: '어제 대비' },
   ]
   const recentPosts = dashboard.recentPosts
-  return <><div className="admin-welcome"><div><p>반가워요, 관리자님 👋</p><h1>오늘의 모아 현황을 확인하세요.</h1></div><span>마지막 업데이트 · 방금 전</span></div><div className="admin-stat-grid">{stats.map((stat) => <article className={`admin-stat ${stat.color}`} key={stat.label}><div><span>{stat.label}</span><strong>{stat.value.toLocaleString()}</strong></div><em>{stat.change}</em><small>지난달 대비</small></article>)}</div><div className="admin-dashboard-grid"><section className="admin-panel admin-activity"><div className="admin-panel-title"><div><h2>주간 활동</h2><p>최근 7일간 커뮤니티 활동</p></div><button type="button">최근 7일⌄</button></div><div className="bar-chart">{[42, 58, 46, 74, 63, 88, 70].map((height, index) => <div key={index}><i style={{ height: `${height}%` }}></i><span>{['월','화','수','목','금','토','일'][index]}</span></div>)}</div></section><section className="admin-panel admin-summary"><div className="admin-panel-title"><div><h2>콘텐츠 비율</h2><p>카테고리별 게시글</p></div></div><div className="donut"><div><strong>100%</strong><span>전체</span></div></div><ul><li><i className="dot green"></i>일상 <strong>42%</strong></li><li><i className="dot purple"></i>정보 <strong>31%</strong></li><li><i className="dot orange"></i>자유 <strong>27%</strong></li></ul></section></div><section className="admin-panel admin-recent"><div className="admin-panel-title"><div><h2>최근 게시글</h2><p>새롭게 등록된 게시글입니다.</p></div><button type="button">전체 보기 →</button></div><AdminPostTable posts={recentPosts} /></section></>
+  const maxActivity = Math.max(1, ...dashboard.weeklyActivity.map((item) => item.value))
+  const categoryColors = ['#68aa85', '#9a8fd2', '#dfa46e', '#70a9c5', '#d47f91', '#a4a96d']
+  const donutSegments = dashboard.categoryDistribution.reduce((result, item, index) => {
+    const start = result.end
+    const end = start + item.percentage
+    return { end, values: [...result.values, `${categoryColors[index % categoryColors.length]} ${start}% ${end}%`] }
+  }, { end: 0, values: [] }).values
+  const donutBackground = donutSegments.length ? `conic-gradient(${donutSegments.join(', ')})` : '#edf1ef'
+  const updatedAt = dashboard.generatedAt
+    ? new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit' }).format(new Date(dashboard.generatedAt))
+    : '-'
+
+  return <><div className="admin-welcome"><div><p>반가워요, 관리자님 👋</p><h1>오늘의 모아 현황을 확인하세요.</h1></div><span>마지막 업데이트 · {updatedAt}</span></div><div className="admin-stat-grid">{stats.map((stat) => { const change = dashboard.changes[stat.key] || 0; return <article className={`admin-stat ${stat.color}`} key={stat.key}><div><span>{stat.label}</span><strong>{stat.value.toLocaleString()}</strong></div><em>{change > 0 ? '+' : ''}{change}%</em><small>{stat.comparison}</small></article> })}</div><div className="admin-dashboard-grid"><section className="admin-panel admin-activity"><div className="admin-panel-title"><div><h2>주간 활동</h2><p>최근 7일간 가입·게시글·댓글 수</p></div><button type="button">최근 7일⌄</button></div><div className="bar-chart">{dashboard.weeklyActivity.map((item) => <div key={item.date} title={`${item.date}: ${item.value}건`}><i style={{ height: `${(item.value / maxActivity) * 100}%` }}></i><span>{new Intl.DateTimeFormat('ko-KR', { weekday: 'short', timeZone: 'Asia/Seoul' }).format(new Date(`${item.date}T00:00:00+09:00`))}</span></div>)}</div></section><section className="admin-panel admin-summary"><div className="admin-panel-title"><div><h2>콘텐츠 비율</h2><p>카테고리별 게시글</p></div></div><div className="donut" style={{ background: donutBackground }}><div><strong>{dashboard.stats.posts.toLocaleString()}</strong><span>전체</span></div></div><ul>{dashboard.categoryDistribution.map((item, index) => <li key={item.category}><i className="dot" style={{ background: categoryColors[index % categoryColors.length] }}></i>{item.category} <strong>{item.percentage}%</strong></li>)}{dashboard.categoryDistribution.length === 0 && <li>게시글이 없습니다.</li>}</ul></section></div><section className="admin-panel admin-recent"><div className="admin-panel-title"><div><h2>최근 게시글</h2><p>새롭게 등록된 게시글입니다.</p></div><button type="button">전체 보기 →</button></div><AdminPostTable posts={recentPosts} /></section></>
 }
 
 function ManagementPanel({ title, description, children }) {

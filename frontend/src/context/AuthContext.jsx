@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api, clearToken, getToken, saveToken } from '../api'
 import { AuthContext } from './auth'
+import { getTokenExpiration } from '../session'
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
@@ -20,7 +21,8 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(() => Boolean(getToken()))
 
   useEffect(() => {
-    if (!getToken()) return
+    const token = getToken()
+    if (!token) return
 
     api('/auth/me').then((data) => {
       localStorage.setItem('moa_user', JSON.stringify(data.user))
@@ -31,6 +33,17 @@ export function AuthProvider({ children }) {
       setUser(null)
     }).finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    if (!user) return undefined
+    const expiresAt = getTokenExpiration(getToken())
+    const expirationTimer = window.setTimeout(() => {
+      clearToken()
+      localStorage.removeItem('moa_user')
+      setUser(null)
+    }, Math.max(0, expiresAt - Date.now()))
+    return () => window.clearTimeout(expirationTimer)
+  }, [user])
 
   const value = useMemo(() => ({
     user,

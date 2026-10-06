@@ -1,3 +1,5 @@
+import { isTokenExpired } from './session'
+
 const TOKEN_KEY = 'moa_token'
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
 
@@ -6,7 +8,13 @@ export function apiUrl(path) {
 }
 
 export function getToken() {
-  return localStorage.getItem(TOKEN_KEY)
+  const token = localStorage.getItem(TOKEN_KEY)
+  if (token && isTokenExpired(token)) {
+    clearToken()
+    localStorage.removeItem('moa_user')
+    return null
+  }
+  return token
 }
 
 export function saveToken(token) {

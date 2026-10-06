@@ -9,12 +9,6 @@ function publicAdmin(admin: AdminRow) {
   return { id: admin.id, email: admin.email, name: admin.name, role: 'admin' as const }
 }
 
-async function count(table: string): Promise<number> {
-  const result = await db.from(table).select('*', { count: 'exact', head: true })
-  assertDatabase(result.error)
-  return result.count || 0
-}
-
 export async function adminRoutes(request: Request, path: string): Promise<Response | null> {
   if (request.method === 'POST' && path === '/admin/login') {
     const body = await bodyJson(request)
@@ -67,18 +61,21 @@ export async function adminRoutes(request: Request, path: string): Promise<Respo
     if (updated.error?.code === '23505') throw new HttpError(409, '이미 사용 중인 이메일입니다.')
     assertDatabase(updated.error)
     const admin = publicAdmin(updated.data as AdminRow)
-    return json(request, { message: '관리자 계정 정보를 변경했습니다.', admin, token: await signSession(admin) })
+    return json(request, { message: '관리자 계정 정보를 변경했습니다.', admin, token: await signSession(admin, session.exp) })
   }
 
   if (request.method === 'GET' && path === '/admin/dashboard') {
-    const [users, posts, comments, viewRows, recent] = await Promise.all([
-      count('users'), count('posts'), count('comments'),
-      db.from('posts').select('view_count'),
-      db.from('post_summaries').select('id,title,category,created_at,is_hidden,author').order('created_at', { ascending: false }).limit(5),
+    const [metrics, recent] = await Promise.all([
+      db.rpc('get_admin_dashboard_metrics'),
+      db.from('post_summaries').select('id,title,category,created_at,is_hidden,author,view_count,comment_count').order('created_at', { ascending: false }).limit(5),
     ])
-    assertDatabase(viewRows.error); assertDatabase(recent.error)
-    const views = (viewRows.data || []).reduce((sum, post) => sum + post.view_count, 0)
-    return json(request, { admin: session, stats: { users, posts, comments, views }, recentPosts: recent.data || [] })
+    assertDatabase(metrics.error); assertDatabase(recent.error)
+    return json(request, {
+      admin: session,
+      ...(metrics.data as Record<string, unknown>),
+      recentPosts: recent.data || [],
+      generatedAt: new Date().toISOString(),
+    })
   }
 
   if (request.method === 'GET' && path === '/admin/users') {

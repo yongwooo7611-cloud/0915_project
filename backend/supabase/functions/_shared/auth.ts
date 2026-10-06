@@ -1,7 +1,9 @@
 import { SignJWT, jwtVerify } from 'jose'
 import { HttpError } from './http.ts'
 
-export type SessionUser = { id: number; email: string; role: 'user' | 'admin'; name?: string }
+export type SessionUser = { id: number; email: string; role: 'user' | 'admin'; name?: string; exp?: number }
+
+const SESSION_LIFETIME_SECONDS = 24 * 60 * 60
 
 function secret(role: 'user' | 'admin'): Uint8Array {
   const name = role === 'admin' ? 'ADMIN_JWT_SECRET' : 'USER_JWT_SECRET'
@@ -10,11 +12,12 @@ function secret(role: 'user' | 'admin'): Uint8Array {
   return new TextEncoder().encode(value)
 }
 
-export async function signSession(user: SessionUser): Promise<string> {
-  const expiresIn = user.role === 'admin' ? '8h' : '7d'
-  return await new SignJWT({ ...user })
+export async function signSession(user: SessionUser, expiresAt?: number): Promise<string> {
+  const { exp: _previousExpiration, ...claims } = user
+  return await new SignJWT(claims)
     .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt().setExpirationTime(expiresIn)
+    .setIssuedAt()
+    .setExpirationTime(expiresAt || Math.floor(Date.now() / 1000) + SESSION_LIFETIME_SECONDS)
     .sign(secret(user.role))
 }
 
@@ -27,7 +30,9 @@ function bearer(request: Request): string {
 export async function requireSession(request: Request, role: 'user' | 'admin'): Promise<SessionUser> {
   try {
     const { payload } = await jwtVerify(bearer(request), secret(role))
-    if (payload.role !== role || !Number.isInteger(payload.id)) throw new Error('invalid role')
+    const now = Math.floor(Date.now() / 1000)
+    if (payload.role !== role || !Number.isInteger(payload.id) || !Number.isInteger(payload.iat)
+      || (payload.iat as number) + SESSION_LIFETIME_SECONDS <= now) throw new Error('invalid session')
     return payload as unknown as SessionUser
   } catch (error) {
     if (error instanceof HttpError) throw error
