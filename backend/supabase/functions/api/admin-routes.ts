@@ -182,7 +182,7 @@ export async function adminRoutes(request: Request, path: string): Promise<Respo
     const adminNote = String(body.adminNote || '').trim()
     if (!['pending', 'reviewing', 'resolved', 'dismissed'].includes(status)) throw new HttpError(400, '신고 처리 상태가 올바르지 않습니다.')
     if (adminNote.length > 2000) throw new HttpError(400, '관리자 메모는 2,000자 이하로 입력해 주세요.')
-    const found = await db.from('reports').select('post_id,comment_id,target_type').eq('id', reportId).maybeSingle()
+    const found = await db.from('신고하기').select('post_id,comment_id,target_type').eq('id', reportId).maybeSingle()
     assertDatabase(found.error)
     if (!found.data) throw new HttpError(404, '신고를 찾을 수 없습니다.')
     if (body.hideTarget === true) {
@@ -194,7 +194,7 @@ export async function adminRoutes(request: Request, path: string): Promise<Respo
       const hidden = await target
       assertDatabase(hidden.error)
     }
-    const result = await db.from('reports').update({
+    const result = await db.from('신고하기').update({
       status, admin_note: adminNote || null, handled_by: session.id,
       handled_at: ['resolved', 'dismissed'].includes(status) ? new Date().toISOString() : null,
     }).eq('id', reportId).select('*').single()

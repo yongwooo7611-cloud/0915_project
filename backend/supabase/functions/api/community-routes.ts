@@ -69,14 +69,14 @@ export async function communityRoutes(request: Request, path: string): Promise<R
     }
     if (targetUserId === user.id) throw new HttpError(400, '본인이 작성한 콘텐츠는 신고할 수 없습니다.')
 
-    let duplicate = db.from('reports').select('id').eq('reporter_id', user.id).eq('target_type', targetType)
+    let duplicate = db.from('신고하기').select('id').eq('reporter_id', user.id).eq('target_type', targetType)
       .in('status', ['pending', 'reviewing']).limit(1)
     duplicate = targetType === 'post' ? duplicate.eq('post_id', targetId) : duplicate.eq('comment_id', targetId)
     const duplicateResult = await duplicate
     assertDatabase(duplicateResult.error)
     if (duplicateResult.data?.length) throw new HttpError(409, '이미 접수되어 처리 중인 신고입니다.')
 
-    const inserted = await db.from('reports').insert({
+    const inserted = await db.from('신고하기').insert({
       reporter_id: user.id, target_type: targetType, post_id: postId, comment_id: commentId,
       target_title: targetTitle, target_content: targetContent, target_author: targetAuthor, reason, details,
     }).select('id,status,created_at').single()
