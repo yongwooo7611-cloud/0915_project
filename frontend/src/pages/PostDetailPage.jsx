@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../context/auth'
 import { formatDate } from '../utils'
+import ReportModal from '../components/ReportModal'
 
 function PostDetailPage() {
   const { postId } = useParams()
@@ -17,6 +18,7 @@ function PostDetailPage() {
   const [reactionSubmitting, setReactionSubmitting] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [editingContent, setEditingContent] = useState('')
+  const [reportTarget, setReportTarget] = useState(null)
 
   const loadPost = useCallback(() => {
     api(`/posts/${postId}`).then((data) => {
@@ -123,13 +125,22 @@ function PostDetailPage() {
     }
   }
 
+  const openReport = (target) => {
+    if (!user) {
+      navigate('/login')
+      return
+    }
+    setReportTarget(target)
+  }
+
   if (loading) return <section className="empty-state container"><p>게시글을 불러오는 중입니다.</p></section>
   if (error && !post) return <section className="empty-state container"><h1>게시글을 찾을 수 없습니다.</h1><p>{error}</p><Link to="/board" className="button">목록으로</Link></section>
 
   const isOwner = user?.id === post.userId
 
   return <section className="section container detail-page">
-    <div className="detail-toolbar"><Link to="/board" className="back-link">← 게시판으로</Link>{isOwner && <div className="post-manage-actions"><Link to={`/board/${post.id}/edit`} className="button button-small button-secondary">수정</Link><button type="button" className="button button-small button-danger" onClick={deletePost}>삭제</button></div>}</div>
+    {reportTarget && <ReportModal target={reportTarget} onClose={() => setReportTarget(null)} />}
+    <div className="detail-toolbar"><Link to="/board" className="back-link">← 게시판으로</Link>{isOwner ? <div className="post-manage-actions"><Link to={`/board/${post.id}/edit`} className="button button-small button-secondary">수정</Link><button type="button" className="button button-small button-danger" onClick={deletePost}>삭제</button></div> : <button type="button" className="report-button" onClick={() => openReport({ type: 'post', id: post.id, label: `게시글 · ${post.title}` })}>게시글 신고</button>}</div>
     {error && <p className="form-error">{error}</p>}
     <article className="article-card">
       <header><span className="tag">{post.category}</span><h1>{post.title}</h1><div className="article-author"><span className="mini-avatar">{post.author[0]}</span><div><strong>{post.author}</strong><p>{formatDate(post.createdAt)} · 조회 {post.views}</p></div></div></header>
@@ -142,7 +153,7 @@ function PostDetailPage() {
       {commentError && <p className="form-error">{commentError}</p>}
       <div>{comments.map((comment) => <div className="comment" key={comment.id}>
         <span className="mini-avatar">{comment.author[0]}</span>
-        <div className="comment-body"><div className="comment-heading"><div><strong>{comment.author}</strong><span>{formatDate(comment.createdAt)}{comment.updatedAt !== comment.createdAt ? ' · 수정됨' : ''}</span></div>{user?.id === comment.userId && editingId !== comment.id && <div className="comment-actions"><button type="button" onClick={() => { setEditingId(comment.id); setEditingContent(comment.content) }}>수정</button><button type="button" className="danger" onClick={() => deleteComment(comment)}>삭제</button></div>}</div>
+        <div className="comment-body"><div className="comment-heading"><div><strong>{comment.author}</strong><span>{formatDate(comment.createdAt)}{comment.updatedAt !== comment.createdAt ? ' · 수정됨' : ''}</span></div>{editingId !== comment.id && (user?.id === comment.userId ? <div className="comment-actions"><button type="button" onClick={() => { setEditingId(comment.id); setEditingContent(comment.content) }}>수정</button><button type="button" className="danger" onClick={() => deleteComment(comment)}>삭제</button></div> : <div className="comment-actions"><button type="button" className="danger" onClick={() => openReport({ type: 'comment', id: comment.id, label: `댓글 · ${comment.author}` })}>신고</button></div>)}</div>
         {editingId === comment.id ? <div className="comment-edit"><textarea value={editingContent} onChange={(event) => setEditingContent(event.target.value)} rows="3" maxLength="2000" /><div><button type="button" className="button button-small" disabled={!editingContent.trim()} onClick={() => updateComment(comment.id)}>저장</button><button type="button" className="button button-small button-secondary" onClick={() => setEditingId(null)}>취소</button></div></div> : <p>{comment.content}</p>}</div>
       </div>)}{comments.length === 0 && <p className="comments-empty">아직 댓글이 없습니다. 첫 댓글을 남겨 주세요.</p>}</div>
     </section>

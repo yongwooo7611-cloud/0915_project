@@ -105,6 +105,103 @@ export async function adminRoutes(request: Request, path: string): Promise<Respo
     return json(request, { comments: result.data || [] })
   }
 
+  if (request.method === 'GET' && path === '/admin/notices') {
+    const result = await db.from('notice_details').select('*').order('created_at', { ascending: false })
+    assertDatabase(result.error)
+    return json(request, { notices: result.data || [] })
+  }
+
+  if (request.method === 'POST' && path === '/admin/notices') {
+    const body = await bodyJson(request)
+    const title = String(body.title || '').trim()
+    const content = String(body.content || '').trim()
+    if (!title || !content) throw new HttpError(400, '공지 제목과 내용을 입력해 주세요.')
+    if (title.length > 120 || content.length > 5000) throw new HttpError(400, '공지 제목은 120자, 내용은 5,000자 이하로 입력해 주세요.')
+    const result = await db.from('notices').insert({ admin_id: session.id, title, content, is_active: body.isActive !== false })
+      .select('*').single()
+    assertDatabase(result.error)
+    return json(request, { notice: result.data }, 201)
+  }
+
+  const noticeMatch = path.match(/^\/admin\/notices\/(\d+)$/)
+  if (noticeMatch && request.method === 'PATCH') {
+    const noticeId = positiveId(noticeMatch[1])
+    const body = await bodyJson(request)
+    const updates: Record<string, unknown> = {}
+    if ('title' in body) updates.title = String(body.title || '').trim()
+    if ('content' in body) updates.content = String(body.content || '').trim()
+    if ('isActive' in body) updates.is_active = body.isActive === true
+    if ((updates.title !== undefined && !updates.title) || (updates.content !== undefined && !updates.content)) throw new HttpError(400, '공지 제목과 내용을 비워둘 수 없습니다.')
+    const result = await db.from('notices').update(updates).eq('id', noticeId).select('*').maybeSingle()
+    assertDatabase(result.error)
+    if (!result.data) throw new HttpError(404, '공지사항을 찾을 수 없습니다.')
+    return json(request, { notice: result.data })
+  }
+  if (noticeMatch && request.method === 'DELETE') {
+    const result = await db.from('notices').delete().eq('id', positiveId(noticeMatch[1])).select('id').maybeSingle()
+    assertDatabase(result.error)
+    if (!result.data) throw new HttpError(404, '공지사항을 찾을 수 없습니다.')
+    return json(request, { message: '공지사항을 삭제했습니다.' })
+  }
+
+  if (request.method === 'GET' && path === '/admin/inquiries') {
+    const result = await db.from('inquiry_details').select('*').order('created_at', { ascending: false })
+    assertDatabase(result.error)
+    return json(request, { inquiries: result.data || [] })
+  }
+
+  const inquiryMatch = path.match(/^\/admin\/inquiries\/(\d+)$/)
+  if (inquiryMatch && request.method === 'PATCH') {
+    const inquiryId = positiveId(inquiryMatch[1])
+    const body = await bodyJson(request)
+    const status = String(body.status || 'answered')
+    const answer = String(body.answer || '').trim()
+    if (!['answered', 'closed'].includes(status)) throw new HttpError(400, '문의 처리 상태가 올바르지 않습니다.')
+    if (status === 'answered' && !answer) throw new HttpError(400, '답변 내용을 입력해 주세요.')
+    if (answer.length > 5000) throw new HttpError(400, '답변은 5,000자 이하로 입력해 주세요.')
+    const updates = status === 'answered'
+      ? { status, answer, answered_by: session.id, answered_at: new Date().toISOString() }
+      : { status }
+    const result = await db.from('inquiries').update(updates).eq('id', inquiryId).select('*').maybeSingle()
+    assertDatabase(result.error)
+    if (!result.data) throw new HttpError(404, '문의를 찾을 수 없습니다.')
+    return json(request, { inquiry: result.data })
+  }
+
+  if (request.method === 'GET' && path === '/admin/reports') {
+    const result = await db.from('report_details').select('*').order('created_at', { ascending: false })
+    assertDatabase(result.error)
+    return json(request, { reports: result.data || [] })
+  }
+
+  const reportMatch = path.match(/^\/admin\/reports\/(\d+)$/)
+  if (reportMatch && request.method === 'PATCH') {
+    const reportId = positiveId(reportMatch[1])
+    const body = await bodyJson(request)
+    const status = String(body.status || 'reviewing')
+    const adminNote = String(body.adminNote || '').trim()
+    if (!['pending', 'reviewing', 'resolved', 'dismissed'].includes(status)) throw new HttpError(400, '신고 처리 상태가 올바르지 않습니다.')
+    if (adminNote.length > 2000) throw new HttpError(400, '관리자 메모는 2,000자 이하로 입력해 주세요.')
+    const found = await db.from('reports').select('post_id,comment_id,target_type').eq('id', reportId).maybeSingle()
+    assertDatabase(found.error)
+    if (!found.data) throw new HttpError(404, '신고를 찾을 수 없습니다.')
+    if (body.hideTarget === true) {
+      const targetId = found.data.target_type === 'post' ? found.data.post_id : found.data.comment_id
+      if (!targetId) throw new HttpError(409, '신고 대상이 이미 삭제되어 숨길 수 없습니다.')
+      const target = found.data.target_type === 'post'
+        ? db.from('posts').update({ is_hidden: true }).eq('id', targetId)
+        : db.from('comments').update({ is_hidden: true }).eq('id', targetId)
+      const hidden = await target
+      assertDatabase(hidden.error)
+    }
+    const result = await db.from('reports').update({
+      status, admin_note: adminNote || null, handled_by: session.id,
+      handled_at: ['resolved', 'dismissed'].includes(status) ? new Date().toISOString() : null,
+    }).eq('id', reportId).select('*').single()
+    assertDatabase(result.error)
+    return json(request, { report: result.data })
+  }
+
   const postVisibility = path.match(/^\/admin\/posts\/(\d+)\/visibility$/)
   if (request.method === 'PATCH' && postVisibility) {
     const postId = positiveId(postVisibility[1]); const body = await bodyJson(request); const hidden = body.hidden === true

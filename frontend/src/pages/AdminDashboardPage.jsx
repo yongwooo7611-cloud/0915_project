@@ -8,8 +8,25 @@ const menuItems = [
   { id: 'members', icon: '♙', label: '회원 관리' },
   { id: 'posts', icon: '▤', label: '게시글 관리' },
   { id: 'comments', icon: '◌', label: '댓글 관리' },
+  { id: 'notices', icon: '◆', label: '공지사항' },
+  { id: 'inquiries', icon: '?', label: '문의하기' },
+  { id: 'reports', icon: '!', label: '신고 관리' },
   { id: 'settings', icon: '⚙', label: '환경 설정' },
 ]
+
+async function adminApi(path, options = {}) {
+  const response = await fetch(apiUrl(path), {
+    ...options,
+    headers: {
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      Authorization: `Bearer ${localStorage.getItem('moa_admin_token')}`,
+      ...options.headers,
+    },
+  })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(data.message || '요청을 처리하지 못했습니다.')
+  return data
+}
 
 function AdminDashboardPage() {
   const navigate = useNavigate()
@@ -25,6 +42,9 @@ function AdminDashboardPage() {
   const [members, setMembers] = useState([])
   const [adminPosts, setAdminPosts] = useState([])
   const [adminComments, setAdminComments] = useState([])
+  const [notices, setNotices] = useState([])
+  const [inquiries, setInquiries] = useState([])
+  const [reports, setReports] = useState([])
   const [memberError, setMemberError] = useState('')
   const [postError, setPostError] = useState('')
   const [commentError, setCommentError] = useState('')
@@ -41,13 +61,16 @@ function AdminDashboardPage() {
 
     const loadDashboard = async () => {
       const headers = { Authorization: `Bearer ${localStorage.getItem('moa_admin_token')}` }
-      const [dashboardResponse, membersResponse, postsResponse, commentsResponse] = await Promise.all([
+      const [dashboardResponse, membersResponse, postsResponse, commentsResponse, noticesResponse, inquiriesResponse, reportsResponse] = await Promise.all([
         fetch(apiUrl('/admin/dashboard'), { headers }),
         fetch(apiUrl('/admin/users'), { headers }),
         fetch(apiUrl('/admin/posts'), { headers }),
         fetch(apiUrl('/admin/comments'), { headers }),
+        fetch(apiUrl('/admin/notices'), { headers }),
+        fetch(apiUrl('/admin/inquiries'), { headers }),
+        fetch(apiUrl('/admin/reports'), { headers }),
       ])
-      if ([dashboardResponse, membersResponse, postsResponse, commentsResponse].some((response) => response.status === 401)) {
+      if ([dashboardResponse, membersResponse, postsResponse, commentsResponse, noticesResponse, inquiriesResponse, reportsResponse].some((response) => response.status === 401)) {
         localStorage.removeItem('moa_admin_token')
         navigate('/admin/login', { replace: true })
         return
@@ -61,6 +84,9 @@ function AdminDashboardPage() {
       }
       if (postsResponse.ok) setAdminPosts((await postsResponse.json()).posts)
       if (commentsResponse.ok) setAdminComments((await commentsResponse.json()).comments)
+      if (noticesResponse.ok) setNotices((await noticesResponse.json()).notices)
+      if (inquiriesResponse.ok) setInquiries((await inquiriesResponse.json()).inquiries)
+      if (reportsResponse.ok) setReports((await reportsResponse.json()).reports)
     }
     loadDashboard().catch(() => {})
     return () => window.clearTimeout(expirationTimer)
@@ -155,11 +181,95 @@ function AdminDashboardPage() {
     if (activeMenu === 'members') return <ManagementPanel title="회원 관리" description="일반 사용자와 관리자를 한눈에 확인합니다.">{memberError && <p className="admin-error">{memberError}</p>}<AdminMemberTable members={members} /></ManagementPanel>
     if (activeMenu === 'posts') return <ManagementPanel title="게시글 관리" description="사용자가 작성한 전체 게시글을 확인하고 관리합니다.">{postError && <p className="admin-error">{postError}</p>}<AdminPostTable posts={adminPosts} onToggleVisibility={updateVisibility} onDelete={deleteAdminPost} showUserEmail /></ManagementPanel>
     if (activeMenu === 'comments') return <ManagementPanel title="댓글 관리" description="전체 댓글을 숨김 또는 삭제할 수 있습니다.">{commentError && <p className="admin-error">{commentError}</p>}<AdminCommentTable comments={adminComments} onToggleVisibility={updateCommentVisibility} onDelete={deleteAdminComment} /></ManagementPanel>
+    if (activeMenu === 'notices') return <ManagementPanel title="공지사항" description="메인 화면에 노출할 공지사항을 작성하고 관리합니다."><AdminNoticePanel notices={notices} setNotices={setNotices} /></ManagementPanel>
+    if (activeMenu === 'inquiries') return <ManagementPanel title="문의하기" description="사용자 문의를 확인하고 답변합니다."><AdminInquiryPanel inquiries={inquiries} setInquiries={setInquiries} /></ManagementPanel>
+    if (activeMenu === 'reports') return <ManagementPanel title="신고 관리" description="접수된 신고를 검토하고 콘텐츠를 제어합니다."><AdminReportPanel reports={reports} setReports={setReports} /></ManagementPanel>
     return <ManagementPanel title="환경 설정" description="관리자 계정과 커뮤니티 운영 환경을 설정합니다."><AdminSettings admin={admin} onUpdate={setAdmin} /></ManagementPanel>
   }
 
   const todayLabel = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'full' }).format(new Date())
   return <div className="admin-shell"><aside className="admin-sidebar"><div className="admin-sidebar-brand"><span>M</span><div>MOA<small>ADMIN CONSOLE</small></div></div><nav>{menuItems.map((item) => <button type="button" className={activeMenu === item.id ? 'active' : ''} onClick={() => setActiveMenu(item.id)} key={item.id}><span>{item.icon}</span>{item.label}</button>)}</nav><div className="admin-sidebar-footer"><div className="admin-user-avatar">{admin.name?.[0] || '관'}</div><div><strong>{admin.name || '관리자'}</strong><small>{admin.email}</small></div><button type="button" onClick={logout} aria-label="로그아웃">↗</button></div></aside><main className="admin-main"><header className="admin-topbar"><div><span>{menuItems.find((item) => item.id === activeMenu)?.label}</span><small>{todayLabel}</small></div><button type="button" className="admin-notification" aria-label="알림">●</button></header><div className="admin-content">{renderContent()}</div></main></div>
+}
+
+function AdminNoticePanel({ notices, setNotices }) {
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const createNotice = async (event) => {
+    event.preventDefault()
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
+    setSubmitting(true); setError('')
+    try {
+      const data = await adminApi('/admin/notices', { method: 'POST', body: JSON.stringify({ title: form.get('title'), content: form.get('content'), isActive: form.get('isActive') === 'on' }) })
+      setNotices((current) => [data.notice, ...current])
+      formElement.reset()
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const toggleNotice = async (notice) => {
+    try {
+      const data = await adminApi(`/admin/notices/${notice.id}`, { method: 'PATCH', body: JSON.stringify({ isActive: !notice.is_active }) })
+      setNotices((current) => current.map((item) => item.id === notice.id ? { ...item, ...data.notice } : item))
+    } catch (requestError) { setError(requestError.message) }
+  }
+
+  const deleteNotice = async (notice) => {
+    if (!window.confirm(`“${notice.title}” 공지를 삭제할까요?`)) return
+    try {
+      await adminApi(`/admin/notices/${notice.id}`, { method: 'DELETE' })
+      setNotices((current) => current.filter((item) => item.id !== notice.id))
+    } catch (requestError) { setError(requestError.message) }
+  }
+
+  return <div className="admin-feature-layout"><form className="admin-feature-form" onSubmit={createNotice}><div className="admin-setting-heading"><h3>새 공지 작성</h3><p>활성화된 공지는 메인 화면에서 모달로 표시됩니다.</p></div><label>제목<input name="title" maxLength="120" required /></label><label>내용<textarea name="content" rows="7" maxLength="5000" required /></label><label className="admin-check"><input name="isActive" type="checkbox" defaultChecked /> 작성 즉시 노출</label>{error && <p className="admin-error">{error}</p>}<button type="submit" disabled={submitting}>{submitting ? '등록 중...' : '공지 등록'}</button></form><div className="admin-record-list">{notices.map((notice) => <article className="admin-record" key={notice.id}><header><div><span className={`admin-status ${notice.is_active ? '' : 'hidden'}`}>{notice.is_active ? '노출 중' : '비활성'}</span><h3>{notice.title}</h3></div><small>{notice.created_at?.slice(0, 10)}</small></header><p>{notice.content}</p><footer><button type="button" onClick={() => toggleNotice(notice)}>{notice.is_active ? '노출 중지' : '노출 시작'}</button><button type="button" className="danger" onClick={() => deleteNotice(notice)}>삭제</button></footer></article>)}{notices.length === 0 && <p className="list-empty">등록된 공지가 없습니다.</p>}</div></div>
+}
+
+function AdminInquiryPanel({ inquiries, setInquiries }) {
+  const [error, setError] = useState('')
+  const [submittingId, setSubmittingId] = useState(null)
+
+  const answerInquiry = async (event, inquiry) => {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    setSubmittingId(inquiry.id); setError('')
+    try {
+      const data = await adminApi(`/admin/inquiries/${inquiry.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'answered', answer: form.get('answer') }) })
+      setInquiries((current) => current.map((item) => item.id === inquiry.id ? { ...item, ...data.inquiry, answered_by_name: '관리자' } : item))
+    } catch (requestError) { setError(requestError.message) } finally { setSubmittingId(null) }
+  }
+
+  const closeInquiry = async (inquiry) => {
+    try {
+      const data = await adminApi(`/admin/inquiries/${inquiry.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'closed' }) })
+      setInquiries((current) => current.map((item) => item.id === inquiry.id ? { ...item, ...data.inquiry } : item))
+    } catch (requestError) { setError(requestError.message) }
+  }
+
+  return <div className="admin-record-list admin-record-list-wide">{error && <p className="admin-error">{error}</p>}{inquiries.map((inquiry) => <article className="admin-record" key={inquiry.id}><header><div><span className={`admin-ticket-status ${inquiry.status}`}>{inquiry.status === 'pending' ? '답변 대기' : inquiry.status === 'answered' ? '답변 완료' : '종료'}</span><h3>{inquiry.title}</h3></div><small>{inquiry.user_name} · {inquiry.user_email}<br />{inquiry.created_at?.slice(0, 10)}</small></header><div className="admin-record-content"><strong>문의 내용</strong><p>{inquiry.content}</p></div>{inquiry.answer && <div className="admin-record-answer"><strong>관리자 답변</strong><p>{inquiry.answer}</p></div>}{inquiry.status !== 'closed' && <form className="admin-inline-form" onSubmit={(event) => answerInquiry(event, inquiry)}><textarea name="answer" rows="4" defaultValue={inquiry.answer || ''} maxLength="5000" placeholder="답변을 입력해 주세요." required /><div><button type="submit" disabled={submittingId === inquiry.id}>{submittingId === inquiry.id ? '저장 중...' : inquiry.answer ? '답변 수정' : '답변 등록'}</button><button type="button" className="danger" onClick={() => closeInquiry(inquiry)}>문의 종료</button></div></form>}</article>)}{inquiries.length === 0 && <p className="list-empty">접수된 문의가 없습니다.</p>}</div>
+}
+
+const reportReasonLabels = { spam: '스팸/광고', abuse: '욕설/괴롭힘', obscene: '부적절한 내용', privacy: '개인정보 노출', other: '기타' }
+
+function AdminReportPanel({ reports, setReports }) {
+  const [error, setError] = useState('')
+  const [submittingId, setSubmittingId] = useState(null)
+
+  const updateReport = async (event, report) => {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    setSubmittingId(report.id); setError('')
+    try {
+      const data = await adminApi(`/admin/reports/${report.id}`, { method: 'PATCH', body: JSON.stringify({ status: form.get('status'), adminNote: form.get('adminNote'), hideTarget: form.get('hideTarget') === 'on' }) })
+      setReports((current) => current.map((item) => item.id === report.id ? { ...item, ...data.report } : item))
+    } catch (requestError) { setError(requestError.message) } finally { setSubmittingId(null) }
+  }
+
+  return <div className="admin-record-list admin-record-list-wide">{error && <p className="admin-error">{error}</p>}{reports.map((report) => <article className="admin-record report-record" key={report.id}><header><div><span className={`admin-ticket-status ${report.status}`}>{report.status === 'pending' ? '접수' : report.status === 'reviewing' ? '검토 중' : report.status === 'resolved' ? '처리 완료' : '기각'}</span><h3>{report.target_type === 'post' ? '게시글' : '댓글'} 신고 · {reportReasonLabels[report.reason]}</h3></div><small>{report.reporter_name} · {report.reporter_email}<br />{report.created_at?.slice(0, 10)}</small></header><div className="report-source"><strong>{report.target_title}</strong><span>작성자: {report.target_author}</span><p>{report.target_content}</p></div><div className="admin-record-content"><strong>신고 내용</strong><p>{report.details}</p></div><form className="admin-inline-form" onSubmit={(event) => updateReport(event, report)}><div className="admin-report-controls"><label>처리 상태<select name="status" defaultValue={report.status}><option value="pending">접수</option><option value="reviewing">검토 중</option><option value="resolved">처리 완료</option><option value="dismissed">기각</option></select></label><label className="admin-check"><input name="hideTarget" type="checkbox" /> 대상 콘텐츠 숨김</label></div><textarea name="adminNote" rows="3" defaultValue={report.admin_note || ''} maxLength="2000" placeholder="처리 메모를 입력해 주세요." /><div><button type="submit" disabled={submittingId === report.id}>{submittingId === report.id ? '저장 중...' : '처리 내용 저장'}</button></div></form></article>)}{reports.length === 0 && <p className="list-empty">접수된 신고가 없습니다.</p>}</div>
 }
 
 function AdminSettings({ admin, onUpdate }) {

@@ -1,6 +1,7 @@
 import { authRoutes } from './auth-routes.ts'
 import { postRoutes } from './post-routes.ts'
 import { adminRoutes } from './admin-routes.ts'
+import { communityRoutes } from './community-routes.ts'
 import { corsHeaders, HttpError, json, routePath } from '../_shared/http.ts'
 
 Deno.serve(async (request) => {
@@ -14,6 +15,7 @@ Deno.serve(async (request) => {
 
     const response = await authRoutes(request, path)
       || await postRoutes(request, path)
+      || await communityRoutes(request, path)
       || await adminRoutes(request, path)
     return response || json(request, { message: 'Route not found.' }, 404)
   } catch (error) {

@@ -8,6 +8,7 @@
     "dev": "npm run functions:serve",
     "check:env": "node scripts/check-env.mjs",
     "db:check": "node scripts/check-database.mjs",
+    "features:check": "node scripts/check-community-features.mjs",
     "db:migrate:sqlite": "node scripts/migrate-sqlite.mjs",
     "admin:sync": "node scripts/sync-admin.mjs",
     "supabase:login": "node scripts/supabase-cli.mjs login",
