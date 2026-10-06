@@ -84,5 +84,14 @@ export async function communityRoutes(request: Request, path: string): Promise<R
     return json(request, { message: '신고가 접수되었습니다.', report: inserted.data }, 201)
   }
 
+  if (path === '/reports' && request.method === 'GET') {
+    const user = await requireSession(request, 'user')
+    const result = await db.from('report_details')
+      .select('id,target_type,post_id,comment_id,target_title,target_content,target_author,reason,details,status,admin_note,handled_at,created_at,updated_at')
+      .eq('reporter_id', user.id).order('created_at', { ascending: false })
+    assertDatabase(result.error)
+    return json(request, { reports: result.data || [] })
+  }
+
   return null
 }
