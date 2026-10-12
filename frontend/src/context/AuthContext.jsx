@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api, clearToken, getToken, saveToken } from '../api'
 import { AuthContext } from './auth'
 import { getTokenExpiration } from '../session'
+import { requireSupabase } from '../supabase'
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
@@ -58,6 +59,26 @@ export function AuthProvider({ children }) {
     },
     async signup(formData) {
       const data = await api('/auth/signup', { method: 'POST', body: JSON.stringify(formData) })
+      saveToken(data.token)
+      localStorage.setItem('moa_user', JSON.stringify(data.user))
+      setUser(data.user)
+      setLoading(false)
+      return data.user
+    },
+    async loginWithKakao(returnTo = '/profile') {
+      const supabase = requireSupabase()
+      sessionStorage.setItem('moa_oauth_return_to', returnTo)
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'kakao',
+        options: { redirectTo: `${window.location.origin}/auth/callback` },
+      })
+      if (error) throw error
+    },
+    async completeKakaoLogin(accessToken) {
+      const data = await api('/auth/oauth/kakao', {
+        method: 'POST',
+        body: JSON.stringify({ accessToken }),
+      })
       saveToken(data.token)
       localStorage.setItem('moa_user', JSON.stringify(data.user))
       setUser(data.user)

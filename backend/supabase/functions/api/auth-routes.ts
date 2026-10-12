@@ -13,7 +13,87 @@ function publicUser(user: UserRow) {
   return { id: user.id, email: user.email, name: user.name || fallbackName, nickname: user.nickname || fallbackName, bio: user.bio || '', createdAt: user.created_at }
 }
 
+function kakaoProfile(authUser: { id: string; user_metadata?: Record<string, unknown> }) {
+  const metadata = authUser.user_metadata || {}
+  const rawName = metadata.name || metadata.full_name || metadata.nickname || metadata.user_name
+  const name = String(rawName || '카카오 사용자').trim().slice(0, 50) || '카카오 사용자'
+  return { name, nickname: name.slice(0, 30) }
+}
+
+async function createKakaoProfile(userId: number, authUserId: string, preferred: { name: string; nickname: string }) {
+  const suffix = authUserId.replaceAll('-', '').slice(-6)
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const ending = attempt === 0 ? '' : `${suffix}${attempt === 1 ? '' : attempt}`
+    const nickname = `${preferred.nickname.slice(0, Math.max(1, 30 - ending.length))}${ending}`
+    const profile = await db.from('profiles').insert({ user_id: userId, name: preferred.name, nickname }).select('id,name,nickname,bio').single()
+    if (!profile.error && profile.data) return profile.data
+    if (profile.error?.code !== '23505') {
+      assertDatabase(profile.error)
+      throw new Error('카카오 프로필을 생성하지 못했습니다.')
+    }
+  }
+  throw new Error('사용 가능한 닉네임을 만들지 못했습니다.')
+}
+
 export async function authRoutes(request: Request, path: string): Promise<Response | null> {
+  if (request.method === 'POST' && path === '/auth/oauth/kakao') {
+    const body = await bodyJson(request)
+    const accessToken = String(body.accessToken || '').trim()
+    if (!accessToken) throw new HttpError(400, '카카오 인증 정보가 없습니다.')
+
+    const verified = await auth.auth.getUser(accessToken)
+    if (verified.error || !verified.data.user) throw new HttpError(401, '카카오 인증이 만료되었거나 유효하지 않습니다.')
+
+    const authUser = verified.data.user
+    const providers = Array.isArray(authUser.app_metadata?.providers) ? authUser.app_metadata.providers : []
+    if (authUser.app_metadata?.provider !== 'kakao' && !providers.includes('kakao')) {
+      throw new HttpError(401, '카카오로 인증된 계정만 사용할 수 있습니다.')
+    }
+
+    const email = authUser.email?.trim().toLowerCase()
+    if (!email) throw new HttpError(400, '카카오 계정의 이메일 제공 동의가 필요합니다. 카카오 앱의 이메일 동의 항목을 확인해 주세요.')
+
+    let { data: user, error: lookupError } = await db.from('user_details').select('*').eq('auth_user_id', authUser.id).maybeSingle()
+    assertDatabase(lookupError)
+
+    if (!user) {
+      const existing = await db.from('users').select('id,auth_user_id,email,created_at,updated_at').eq('email', email).maybeSingle()
+      assertDatabase(existing.error)
+      if (existing.data && existing.data.auth_user_id !== authUser.id) {
+        throw new HttpError(409, '같은 이메일로 가입된 계정이 있습니다. 기존 이메일 로그인을 이용해 주세요.')
+      }
+
+      let account = existing.data
+      let accountCreated = false
+      if (!account) {
+        const inserted = await db.from('users').insert({ auth_user_id: authUser.id, email }).select('id,auth_user_id,email,created_at,updated_at').single()
+        if (inserted.error || !inserted.data) {
+          if (inserted.error?.code === '23505') throw new HttpError(409, '이미 연결된 카카오 또는 이메일 계정입니다.')
+          assertDatabase(inserted.error)
+          throw new Error('카카오 계정을 등록하지 못했습니다.')
+        }
+        account = inserted.data
+        accountCreated = true
+      }
+
+      try {
+        await createKakaoProfile(account.id, authUser.id, kakaoProfile(authUser))
+      } catch (error) {
+        if (accountCreated) await db.from('users').delete().eq('id', account.id)
+        throw error
+      }
+
+      const details = await db.from('user_details').select('*').eq('auth_user_id', authUser.id).maybeSingle()
+      assertDatabase(details.error)
+      if (!details.data) throw new Error('카카오 계정 프로필을 불러오지 못했습니다.')
+      user = details.data
+    }
+
+    const appUser = user as UserRow
+    const token = await signSession({ id: appUser.id, email: appUser.email, role: 'user' })
+    return json(request, { token, user: publicUser(appUser) })
+  }
+
   if (request.method === 'POST' && path === '/auth/signup') {
     const body = await bodyJson(request)
     const name = String(body.name || '').trim()

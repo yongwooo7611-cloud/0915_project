@@ -3,6 +3,7 @@ import AdminRoute from './components/AdminRoute'
 import Layout from './components/Layout'
 import { AuthProvider } from './context/AuthContext'
 import AdminDashboardPage from './pages/AdminDashboardPage'
+import AuthCallbackPage from './pages/AuthCallbackPage'
 import AdminLoginPage from './pages/AdminLoginPage'
 import BoardPage from './pages/BoardPage'
 import CreatePostPage from './pages/CreatePostPage'
@@ -22,6 +23,7 @@ function App() {
         <Routes>
           <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route path="/admin" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
+          <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route element={<Layout />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/login" element={<LoginPage />} />

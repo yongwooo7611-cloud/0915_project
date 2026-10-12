@@ -97,9 +97,19 @@ Vercel 프로젝트에 다음 환경변수를 추가하고 프런트를 다시 �
 
 ```text
 VITE_API_BASE_URL=https://<project-ref>.supabase.co/functions/v1/api
+VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 ```
 
 동시에 백엔드의 `CORS_ORIGINS`에 실제 Vercel 도메인을 등록하고 Edge Function secret을 다시 설정해야 합니다.
+
+## 7. 카카오 로그인 설정
+
+1. 카카오 Developers에서 앱을 만들고 카카오 로그인을 활성화합니다.
+2. 카카오 REST API 키와 활성화한 Client Secret을 Supabase Dashboard > Authentication > Sign In / Providers > Kakao에 등록합니다.
+3. 카카오의 리다이렉트 URI에 `https://<project-ref>.supabase.co/auth/v1/callback`을 등록합니다.
+4. Supabase Dashboard > Authentication > URL Configuration의 Redirect URLs에 운영 주소 `https://<frontend-domain>/auth/callback`과 로컬 주소 `http://localhost:5173/auth/callback`을 추가합니다.
+5. 카카오 동의항목에서 `profile_nickname`과 `account_email`을 설정합니다. `account_email`은 Biz App에서 설정할 수 있으며, 이 앱은 기존 이메일 계정과의 안전한 중복 확인을 위해 이메일을 요구합니다.
 
 ## API 호환 범위
 

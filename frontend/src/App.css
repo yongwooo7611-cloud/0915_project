@@ -26,6 +26,24 @@
 .button-danger:hover { background: #8f3434; }
 .button-light { background: #fff; color: var(--green); border-color: #fff; }
 .button-full { width: 100%; padding: 14px; margin-top: 4px; }
+.kakao-auth-wrap { width: 100%; }
+.kakao-auth-button { width: 100%; min-height: 49px; padding: 12px 18px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid #fee500; border-radius: 8px; color: rgba(0,0,0,.85); background: #fee500; font-weight: 700; transition: .2s ease; }
+.kakao-auth-button:hover { background: #f4dc00; border-color: #f4dc00; transform: translateY(-1px); }
+.kakao-auth-button:disabled { opacity: .65; cursor: wait; transform: none; }
+.kakao-auth-button svg { width: 20px; height: 20px; flex: 0 0 auto; fill: #191919; }
+.kakao-auth-error { margin: 9px 0 0; text-align: center; }
+.auth-divider { display: flex; align-items: center; gap: 13px; margin: 22px 0; color: #98a19b; font-size: 12px; }
+.auth-divider::before, .auth-divider::after { content: ''; height: 1px; flex: 1; background: var(--line); }
+.kakao-auth-hero { width: auto; }
+.kakao-auth-hero .kakao-auth-button { min-height: 44px; padding: 11px 18px; }
+.kakao-auth-hero .kakao-auth-error { max-width: 250px; }
+.auth-callback-card { text-align: center; }
+.auth-callback-card h1 { margin: 18px 0 9px; color: var(--green-dark); font: 29px var(--serif); }
+.auth-callback-card p { margin: 0 0 22px; color: var(--muted); line-height: 1.7; font-size: 14px; }
+.auth-status-icon, .auth-spinner { width: 48px; height: 48px; margin: 0 auto; display: grid; place-items: center; border-radius: 50%; }
+.auth-status-icon.error { color: white; background: #b34a4a; font-size: 25px; font-weight: 700; }
+.auth-spinner { border: 4px solid #dce7de; border-top-color: var(--green); animation: auth-spin .8s linear infinite; }
+@keyframes auth-spin { to { transform: rotate(360deg); } }
 .eyebrow { color: #6e8b76; font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
 .hero-section { min-height: 530px; display: grid; place-items: center; background: radial-gradient(circle at 78% 35%, rgba(176,199,177,.65) 0 4%, transparent 4.2%), radial-gradient(circle at 80% 36%, rgba(255,255,255,.55) 0 16%, transparent 16.2%), linear-gradient(125deg, #f3eee2 0 55%, #dce7dc 55% 100%); overflow: hidden; }
 .hero-content { padding: 80px 0; }
@@ -169,6 +187,8 @@
   .banner-inner { gap: 25px; }
   .footer-inner { gap: 20px; }
   .auth-card { padding: 30px 22px; }
+  .hero-actions { align-items: stretch; flex-direction: column; }
+  .kakao-auth-hero { width: 100%; }
   .form-row { grid-template-columns: 1fr; }
   .board-tools { align-items: stretch; flex-direction: column; }
   .search-box { width: 100%; }
