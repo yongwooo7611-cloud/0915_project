@@ -1,5 +1,4 @@
 const TOSS_PAYMENTS_SDK_URL = 'https://js.tosspayments.com/v2/standard'
-const CUSTOMER_KEY_STORAGE = 'moa_toss_customer_key'
 
 function loadTossPaymentsSdk() {
   if (window.TossPayments) return Promise.resolve(window.TossPayments)
@@ -23,18 +22,10 @@ function loadTossPaymentsSdk() {
   })
 }
 
-function getCustomerKey() {
-  const savedKey = localStorage.getItem(CUSTOMER_KEY_STORAGE)
-  if (savedKey) return savedKey
-  const customerKey = `moa-${crypto.randomUUID()}`
-  localStorage.setItem(CUSTOMER_KEY_STORAGE, customerKey)
-  return customerKey
-}
-
-export async function initializeTossPayment() {
+export async function initializeTossPayment(customerKey = 'ANONYMOUS') {
   const clientKey = import.meta.env.VITE_TOSS_PAYMENTS_CLIENT_KEY?.trim()
   if (!clientKey) throw new Error('토스페이먼츠 클라이언트 키가 설정되지 않았습니다.')
 
   const TossPayments = await loadTossPaymentsSdk()
-  return TossPayments(clientKey).payment({ customerKey: getCustomerKey() })
+  return TossPayments(clientKey).payment({ customerKey })
 }
