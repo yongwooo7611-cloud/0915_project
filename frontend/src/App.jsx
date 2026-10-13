@@ -13,6 +13,8 @@ import LoginPage from './pages/LoginPage'
 import NotFoundPage from './pages/NotFoundPage'
 import PostDetailPage from './pages/PostDetailPage'
 import ProfilePage from './pages/ProfilePage'
+import StorePage from './pages/StorePage'
+import PaymentResultPage from './pages/PaymentResultPage'
 import SignupPage from './pages/SignupPage'
 import './App.css'
 
@@ -29,6 +31,8 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/store" element={<StorePage />} />
+            <Route path="/store/payment-result" element={<PaymentResultPage />} />
             <Route path="/board" element={<BoardPage />} />
             <Route path="/board/new" element={<CreatePostPage />} />
             <Route path="/board/:postId/edit" element={<EditPostPage />} />

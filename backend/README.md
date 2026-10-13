@@ -25,8 +25,10 @@
 - `SUPABASE_ACCESS_TOKEN`: Supabase CLI 로그인 토큰
 - `USER_JWT_SECRET`, `ADMIN_JWT_SECRET`: 서로 다른 32자 이상의 앱 토큰 서명키
 - `CORS_ORIGINS`: 쉼표로 구분한 Vercel 및 로컬 프런트 주소
+- `TOSS_PAYMENTS_CLIENT_KEY`: 토스페이먼츠 클라이언트 키(`test_ck_...` 또는 `live_ck_...`)
+- `TOSS_PAYMENTS_SECRET_KEY`: 토스페이먼츠 서버 API 전용 시크릿 키(`test_sk_...` 또는 `live_sk_...`)
 
-`SUPABASE_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ACCESS_TOKEN`은 절대로 `VITE_` 접두사를 붙이거나 프런트 환경변수에 넣지 마세요.
+`SUPABASE_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ACCESS_TOKEN`, `TOSS_PAYMENTS_SECRET_KEY`는 절대로 `VITE_` 접두사를 붙이거나 프런트 환경변수에 넣지 마세요.
 
 ## 2. 설치 및 프로젝트 연결
 
@@ -99,6 +101,7 @@ Vercel 프로젝트에 다음 환경변수를 추가하고 프런트를 다시 �
 VITE_API_BASE_URL=https://<project-ref>.supabase.co/functions/v1/api
 VITE_SUPABASE_URL=https://<project-ref>.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+VITE_TOSS_PAYMENTS_CLIENT_KEY=test_ck_...
 ```
 
 동시에 백엔드의 `CORS_ORIGINS`에 실제 Vercel 도메인을 등록하고 Edge Function secret을 다시 설정해야 합니다.

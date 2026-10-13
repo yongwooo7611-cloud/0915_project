@@ -57,13 +57,18 @@ function dbPush() {
 
 function pushSecrets() {
   required('SUPABASE_ACCESS_TOKEN')
-  run([
+  const secrets = [
     'secrets', 'set',
     `USER_JWT_SECRET=${required('USER_JWT_SECRET')}`,
     `ADMIN_JWT_SECRET=${required('ADMIN_JWT_SECRET')}`,
     `CORS_ORIGINS=${required('CORS_ORIGINS')}`,
-    '--project-ref', requiredProjectRef(),
-  ])
+  ]
+  const tossPaymentsClientKey = process.env.TOSS_PAYMENTS_CLIENT_KEY?.trim()
+  const tossPaymentsSecretKey = process.env.TOSS_PAYMENTS_SECRET_KEY?.trim()
+  if (tossPaymentsClientKey) secrets.push(`TOSS_PAYMENTS_CLIENT_KEY=${tossPaymentsClientKey}`)
+  if (tossPaymentsSecretKey) secrets.push(`TOSS_PAYMENTS_SECRET_KEY=${tossPaymentsSecretKey}`)
+  secrets.push('--project-ref', requiredProjectRef())
+  run(secrets)
 }
 
 const actions = {

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api, clearToken, getToken, saveToken } from '../api'
 import { AuthContext } from './auth'
 import { getTokenExpiration } from '../session'
-import { requireSupabase } from '../supabase'
+import { requireSupabase, supabase as supabaseClient } from '../supabase'
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
@@ -67,10 +67,14 @@ export function AuthProvider({ children }) {
     },
     async loginWithKakao(returnTo = '/profile') {
       const supabase = requireSupabase()
+      await supabase.auth.signOut({ scope: 'local' })
       sessionStorage.setItem('moa_oauth_return_to', returnTo)
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'kakao',
-        options: { redirectTo: `${window.location.origin}/auth/callback` },
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+          queryParams: { prompt: 'login' },
+        },
       })
       if (error) throw error
     },
@@ -85,10 +89,12 @@ export function AuthProvider({ children }) {
       setLoading(false)
       return data.user
     },
-    logout() {
+    async logout() {
       clearToken()
       localStorage.removeItem('moa_user')
+      sessionStorage.removeItem('moa_oauth_return_to')
       setUser(null)
+      await supabaseClient?.auth.signOut({ scope: 'local' })
     },
   }), [user, loading])
 
