@@ -16,7 +16,8 @@ const subscriptionPlans = {
 
 type TossPayment = {
   paymentKey: string; orderId: string; status: string; method?: string;
-  totalAmount?: number; approvedAt?: string; receipt?: { url?: string };
+  totalAmount?: number; balanceAmount?: number; approvedAt?: string; receipt?: { url?: string };
+  cancels?: Array<{ cancelAmount: number; cancelReason: string; canceledAt: string; transactionKey: string; cancelStatus: string }>;
 }
 
 type TossBilling = { billingKey: string; customerKey: string; method?: string }
@@ -83,6 +84,27 @@ async function confirmPayment(paymentKey: string, requestedOrderId: string, amou
   }
 }
 
+async function cancelPayment(paymentKey: string, requestedOrderId: string, reason: string): Promise<TossPayment> {
+  try {
+    return await tossRequest<TossPayment>(`/v1/payments/${encodeURIComponent(paymentKey)}/cancel`, 'POST', {
+      cancelReason: reason,
+    }, `cancel-${requestedOrderId}`)
+  } catch (cancelError) {
+    const shouldQuery = !(cancelError instanceof TossApiError)
+      || cancelError.upstreamStatus >= 500
+      || cancelError.code === 'ALREADY_CANCELED_PAYMENT'
+    if (!shouldQuery) throw cancelError
+
+    try {
+      const payment = await tossRequest<TossPayment>(`/v1/payments/${encodeURIComponent(paymentKey)}`, 'GET')
+      if (payment.status === 'CANCELED') return payment
+    } catch (queryError) {
+      console.error('Toss Payments cancellation recovery failed:', queryError instanceof Error ? queryError.message : queryError)
+    }
+    throw cancelError
+  }
+}
+
 function orderId(prefix: string): string {
   return `MOA-${prefix}-${crypto.randomUUID().replaceAll('-', '')}`
 }
@@ -127,10 +149,39 @@ async function accountSummary(userId: number) {
   }
 }
 
+function paymentHistoryItem(order: Record<string, unknown>) {
+  return {
+    orderId: order.order_id,
+    kind: order.kind,
+    productId: order.product_id,
+    orderName: order.order_name,
+    amount: order.amount,
+    credits: order.credits,
+    status: order.status,
+    method: order.method,
+    receiptUrl: order.receipt_url,
+    approvedAt: order.approved_at,
+    createdAt: order.created_at,
+    canceledAt: order.canceled_at,
+    canceledAmount: order.canceled_amount,
+    cancelReason: order.cancel_reason,
+    canCancel: order.kind === 'credit' && order.status === 'completed' && Boolean(order.payment_key),
+  }
+}
+
 export async function paymentRoutes(request: Request, path: string): Promise<Response | null> {
   if (request.method === 'GET' && path === '/payments/me') {
     const session = await requireSession(request, 'user')
     return json(request, { customerKey: await customerKey(session.id), ...await accountSummary(session.id) })
+  }
+
+  if (request.method === 'GET' && path === '/payments/history') {
+    const session = await requireSession(request, 'user')
+    const orders = await db.from('payment_orders')
+      .select('order_id,kind,product_id,order_name,amount,credits,status,method,receipt_url,approved_at,created_at,canceled_at,canceled_amount,cancel_reason,payment_key')
+      .eq('user_id', session.id).order('created_at', { ascending: false }).limit(100)
+    assertDatabase(orders.error)
+    return json(request, { payments: (orders.data || []).map((order) => paymentHistoryItem(order)) })
   }
 
   if (request.method === 'POST' && path === '/payments/orders') {
@@ -241,6 +292,55 @@ export async function paymentRoutes(request: Request, path: string): Promise<Res
     const canceled = await db.from('subscriptions').update({ status: 'canceled', billing_key: null, canceled_at: new Date().toISOString() }).eq('user_id', session.id)
     assertDatabase(canceled.error)
     return json(request, { success: true, ...(await accountSummary(session.id)) })
+  }
+
+  const cancelMatch = path.match(/^\/payments\/orders\/([A-Za-z0-9_-]{6,64})\/cancel$/)
+  if (request.method === 'POST' && cancelMatch) {
+    const session = await requireSession(request, 'user')
+    const body = await bodyJson(request)
+    const reason = String(body.reason || '고객 요청으로 결제 취소').trim()
+    if (!reason || reason.length > 200) throw new HttpError(400, '취소 사유는 200자 이내로 입력해 주세요.')
+
+    const order = await db.from('payment_orders').select('*')
+      .eq('order_id', cancelMatch[1]).eq('user_id', session.id).maybeSingle()
+    assertDatabase(order.error)
+    if (!order.data) throw new HttpError(404, '결제 내역을 찾을 수 없습니다.')
+    if (order.data.status === 'canceled') {
+      return json(request, { success: true, payment: paymentHistoryItem(order.data), ...(await accountSummary(session.id)) })
+    }
+    if (order.data.kind !== 'credit' || order.data.status !== 'completed' || !order.data.payment_key) {
+      throw new HttpError(409, '이 결제는 사용자 화면에서 취소할 수 없습니다.')
+    }
+
+    const wallet = await db.from('credit_wallets').select('balance').eq('user_id', session.id).maybeSingle()
+    assertDatabase(wallet.error)
+    if ((wallet.data?.balance || 0) < order.data.credits) {
+      throw new HttpError(409, '구매한 크레딧을 이미 사용하여 결제를 취소할 수 없습니다.')
+    }
+
+    const canceledPayment = await cancelPayment(order.data.payment_key, order.data.order_id, reason)
+    if (canceledPayment.status !== 'CANCELED' || (canceledPayment.balanceAmount ?? 0) !== 0) {
+      throw new HttpError(502, '토스페이먼츠 취소 결과를 확인하지 못했습니다.')
+    }
+    const cancellation = [...(canceledPayment.cancels || [])].reverse().find((item) => item.cancelStatus === 'DONE')
+    if (!cancellation || cancellation.cancelAmount !== order.data.amount) {
+      throw new HttpError(502, '전액 취소 결과가 주문 금액과 일치하지 않습니다.')
+    }
+
+    const finalized = await db.rpc('finalize_payment_cancellation', {
+      p_order_id: order.data.order_id, p_user_id: session.id,
+      p_toss_status: canceledPayment.status, p_cancel_amount: cancellation.cancelAmount,
+      p_cancel_reason: cancellation.cancelReason || reason,
+      p_cancel_transaction_key: cancellation.transactionKey,
+      p_canceled_at: cancellation.canceledAt || new Date().toISOString(),
+    })
+    assertDatabase(finalized.error)
+    const updated = await db.from('payment_orders').select('*').eq('id', order.data.id).single()
+    assertDatabase(updated.error)
+    return json(request, {
+      success: true, payment: paymentHistoryItem(updated.data!),
+      creditBalance: finalized.data?.[0]?.balance || 0,
+    })
   }
 
   return null
