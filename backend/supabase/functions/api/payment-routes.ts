@@ -21,28 +21,66 @@ type TossPayment = {
 
 type TossBilling = { billingKey: string; customerKey: string; method?: string }
 
+class TossApiError extends HttpError {
+  constructor(public upstreamStatus: number, public code: string, message: string) {
+    super(upstreamStatus >= 500 ? 502 : 400, message)
+  }
+}
+
 function tossAuthorization(): string {
   return `Basic ${btoa(`${requiredEnv('TOSS_PAYMENTS_SECRET_KEY')}:`)}`
 }
 
-async function tossRequest<T>(path: string, method: 'POST' | 'DELETE', body?: Record<string, unknown>, idempotencyKey?: string): Promise<T> {
-  const response = await fetch(`https://api.tosspayments.com${path}`, {
-    method,
-    headers: {
-      Authorization: tossAuthorization(),
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-      ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(65000),
-  })
+async function tossRequest<T>(path: string, method: 'GET' | 'POST' | 'DELETE', body?: Record<string, unknown>, idempotencyKey?: string): Promise<T> {
+  let response: Response
+  try {
+    response = await fetch(`https://api.tosspayments.com${path}`, {
+      method,
+      headers: {
+        Authorization: tossAuthorization(),
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+        ...(method === 'POST' && idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(65000),
+    })
+  } catch (error) {
+    console.error('Toss Payments network error:', error instanceof Error ? error.message : error)
+    throw new HttpError(502, '토스페이먼츠 서버 응답을 확인하지 못했습니다. 잠시 후 결제 상태를 다시 확인해 주세요.')
+  }
   const text = await response.text()
-  const data = text ? JSON.parse(text) : {}
+  let data: Record<string, unknown> = {}
+  try {
+    data = text ? JSON.parse(text) : {}
+  } catch {
+    data = { message: text || '토스페이먼츠에서 올바르지 않은 응답을 받았습니다.' }
+  }
   if (!response.ok) {
     console.error('Toss Payments error:', response.status, data.code, data.message)
-    throw new HttpError(response.status >= 500 ? 502 : 400, data.message || '토스페이먼츠 요청을 처리하지 못했습니다.')
+    throw new TossApiError(response.status, String(data.code || ''), String(data.message || '토스페이먼츠 요청을 처리하지 못했습니다.'))
   }
   return data as T
+}
+
+async function confirmPayment(paymentKey: string, requestedOrderId: string, amount: number): Promise<TossPayment> {
+  try {
+    return await tossRequest<TossPayment>('/v1/payments/confirm', 'POST', {
+      paymentKey, orderId: requestedOrderId, amount,
+    }, `confirm-${requestedOrderId}`)
+  } catch (confirmError) {
+    const shouldQuery = !(confirmError instanceof TossApiError)
+      || confirmError.upstreamStatus >= 500
+      || confirmError.code === 'ALREADY_PROCESSED_PAYMENT'
+    if (!shouldQuery) throw confirmError
+
+    try {
+      const payment = await tossRequest<TossPayment>(`/v1/payments/${encodeURIComponent(paymentKey)}`, 'GET')
+      if (payment.status === 'DONE') return payment
+    } catch (queryError) {
+      console.error('Toss Payments recovery query failed:', queryError instanceof Error ? queryError.message : queryError)
+    }
+    throw confirmError
+  }
 }
 
 function orderId(prefix: string): string {
@@ -128,9 +166,7 @@ export async function paymentRoutes(request: Request, path: string): Promise<Res
     if (order.data.amount !== amount) throw new HttpError(400, '결제 금액이 주문 금액과 일치하지 않습니다.')
     if (order.data.status === 'completed') return json(request, { success: true, ...(await accountSummary(session.id)) })
 
-    const payment = await tossRequest<TossPayment>('/v1/payments/confirm', 'POST', {
-      paymentKey, orderId: requestedOrderId, amount: order.data.amount,
-    }, `confirm-${requestedOrderId}`)
+    const payment = await confirmPayment(paymentKey, requestedOrderId, order.data.amount)
     if (payment.orderId !== requestedOrderId || payment.totalAmount !== order.data.amount || payment.status !== 'DONE') {
       throw new HttpError(502, '토스페이먼츠 승인 결과가 주문 정보와 일치하지 않습니다.')
     }
