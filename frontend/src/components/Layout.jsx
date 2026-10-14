@@ -21,7 +21,7 @@ function Layout() {
       {legalModal && <LegalModal type={legalModal} onClose={() => setLegalModal(null)} />}
       <header className="site-header">
         <div className="container header-inner">
-          <NavLink to="/" className="brand" aria-label="모아 홈"><span className="brand-mark">M</span><span>모아</span></NavLink>
+          <NavLink to="/" className="brand" aria-label="사유 홈"><span className="brand-mark">M</span><span>사유</span></NavLink>
           <nav className="main-nav" aria-label="주요 메뉴"><NavLink to="/" end>홈</NavLink><NavLink to="/board">게시판</NavLink><NavLink to="/store">상점</NavLink>{user && <NavLink to="/profile">프로필</NavLink>}</nav>
           <div className="header-actions">
             {user ? <button type="button" className="text-button" onClick={handleLogout}>로그아웃</button> : <><NavLink to="/login" className="text-link">로그인</NavLink><NavLink to="/signup" className="button button-small">회원가입</NavLink></>}
