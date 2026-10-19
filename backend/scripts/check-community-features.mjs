@@ -64,6 +64,17 @@ if (userResult.data) {
     throw new Error(`/payments/subscriptions/orders validation check failed (${invalidSubscriptionOrder.status}).`)
   }
   console.log('/payments/subscriptions/orders validation: ok')
+
+  const failedPaymentRecord = await fetch(`${baseUrl}/payments/fail`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${userToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orderId: 'MOA-TEST-NOTFOUND', code: 'TEST_FAILURE' }),
+  })
+  const failedPaymentData = await failedPaymentRecord.json()
+  if (!failedPaymentRecord.ok || failedPaymentData.recorded !== false) {
+    throw new Error(`/payments/fail validation check failed (${failedPaymentRecord.status}).`)
+  }
+  console.log('/payments/fail validation: ok')
 } else {
   console.log('/reports (user): skipped (no users)')
 }

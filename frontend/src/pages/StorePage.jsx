@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../context/auth'
-import { initializeTossPayment } from '../payments'
+import { initializeTossPayment, paymentErrorMessage } from '../payments'
 
 const subscriptions = [
   { id: 'sprout', name: '새싹 멤버십', price: 4900, description: '가볍게 시작하는 모아의 첫 구독', benefits: ['매월 300 크레딧', '프로필 새싹 배지', '광고 없는 게시판'] },
@@ -69,11 +69,13 @@ function StorePage() {
       return
     }
     setProcessingId(plan.id)
+    let orderId = ''
     try {
       const { order } = await api('/payments/subscriptions/orders', {
         method: 'POST',
         body: JSON.stringify({ planId: plan.id }),
       })
+      orderId = order.orderId
       await payment.requestPayment({
         method: 'CARD',
         amount: { currency: 'KRW', value: order.amount },
@@ -86,7 +88,8 @@ function StorePage() {
         card: { flowMode: 'DEFAULT' },
       })
     } catch (paymentError) {
-      if (paymentError.code !== 'USER_CANCEL') setError(paymentError.message || '구독 결제창을 열지 못했습니다.')
+      if (orderId) api('/payments/fail', { method: 'POST', body: JSON.stringify({ orderId, code: paymentError.code || 'PAYMENT_WINDOW_ERROR' }) }).catch(() => {})
+      setError(paymentErrorMessage(paymentError, '멤버십 결제를 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.'))
     } finally {
       setProcessingId('')
     }
@@ -95,11 +98,13 @@ function StorePage() {
   const buyCredits = async (pack) => {
     if (!requirePayment()) return
     setProcessingId(pack.id)
+    let orderId = ''
     try {
       const { order } = await api('/payments/orders', {
         method: 'POST',
         body: JSON.stringify({ productId: pack.id }),
       })
+      orderId = order.orderId
       await payment.requestPayment({
         method: 'CARD',
         amount: { currency: 'KRW', value: order.amount },
@@ -112,7 +117,8 @@ function StorePage() {
         card: { flowMode: 'DEFAULT' },
       })
     } catch (paymentError) {
-      if (paymentError.code !== 'USER_CANCEL') setError(paymentError.message || '크레딧 결제창을 열지 못했습니다.')
+      if (orderId) api('/payments/fail', { method: 'POST', body: JSON.stringify({ orderId, code: paymentError.code || 'PAYMENT_WINDOW_ERROR' }) }).catch(() => {})
+      setError(paymentErrorMessage(paymentError, '크레딧 결제를 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.'))
     } finally {
       setProcessingId('')
     }

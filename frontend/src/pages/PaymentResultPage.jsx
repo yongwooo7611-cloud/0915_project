@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../context/auth'
+import { paymentErrorMessage } from '../payments'
 
 function PaymentResultPage() {
   const [params] = useSearchParams()
@@ -10,11 +11,11 @@ function PaymentResultPage() {
   const redirectFailed = params.get('status') === 'fail' || params.has('code')
   const type = params.get('type')
   const [state, setState] = useState(redirectFailed ? 'error' : 'processing')
-  const [message, setMessage] = useState(redirectFailed ? params.get('message') || '결제 과정이 취소되었거나 오류가 발생했습니다.' : '토스페이먼츠 결제를 승인하고 있습니다.')
+  const [message, setMessage] = useState(redirectFailed ? paymentErrorMessage({ code: params.get('code') }) : '안전하게 결제 결과를 확인하고 있습니다.')
   const [result, setResult] = useState(null)
 
   useEffect(() => {
-    if (redirectFailed || authLoading || started.current) return
+    if (authLoading || started.current) return
     if (!user) {
       started.current = true
       queueMicrotask(() => {
@@ -25,6 +26,15 @@ function PaymentResultPage() {
     }
     started.current = true
 
+    if (redirectFailed) {
+      const orderId = params.get('orderId')
+      if (orderId) api('/payments/fail', {
+        method: 'POST',
+        body: JSON.stringify({ orderId, code: params.get('code') || 'PAYMENT_FAILED' }),
+      }).catch(() => {})
+      return
+    }
+
     const approve = async () => {
       const data = await api('/payments/confirm', {
         method: 'POST',
@@ -32,17 +42,22 @@ function PaymentResultPage() {
       })
       setResult(data)
       setState('success')
-      setMessage(type === 'subscription' ? '멤버십이 활성화되고 이번 달 크레딧이 적립됐습니다.' : '결제가 승인되고 크레딧이 적립됐습니다.')
+      setMessage(type === 'subscription' ? '멤버십 결제가 완료되었습니다. 30일 이용 혜택과 크레딧이 적용됐습니다.' : '크레딧 결제가 완료되었습니다. 구매한 크레딧이 바로 적립됐습니다.')
     }
     approve().catch((approvalError) => {
       setState('error')
-      setMessage(approvalError.message)
+      setMessage(paymentErrorMessage(approvalError, '결제 승인 결과를 확인하지 못했습니다. 잠시 후 프로필의 결제 내역을 확인해 주세요.'))
     })
   }, [authLoading, params, redirectFailed, type, user])
 
-  const title = state === 'processing' ? '결제를 처리하고 있어요' : state === 'success' ? '결제가 완료됐어요' : '결제를 완료하지 못했어요'
+  const isSubscription = type === 'subscription'
+  const title = state === 'processing'
+    ? isSubscription ? '멤버십 결제를 확인하고 있습니다' : '크레딧 결제를 확인하고 있습니다'
+    : state === 'success'
+      ? isSubscription ? '멤버십 결제가 완료되었습니다' : '크레딧 충전이 완료되었습니다'
+      : isSubscription ? '멤버십 결제를 완료하지 못했습니다' : '크레딧 결제를 완료하지 못했습니다'
 
-  return <section className="auth-section container"><div className="auth-card payment-result-card">{state === 'processing' ? <span className="auth-spinner" aria-hidden="true" /> : <span className={`auth-status-icon ${state === 'error' ? 'error' : 'success'}`}>{state === 'error' ? '!' : '✓'}</span>}<span className="eyebrow">PAYMENT RESULT</span><h1>{title}</h1><p>{message}</p>{state === 'success' && result && <div className="payment-credit-result"><span>현재 보유 크레딧</span><strong>C {result.creditBalance?.toLocaleString('ko-KR')}</strong>{result.receiptUrl && <a href={result.receiptUrl} target="_blank" rel="noreferrer">영수증 보기 →</a>}</div>}<div className="payment-result-actions"><Link to="/store" className="button button-full">상점으로 돌아가기</Link><Link to="/" className="text-link">홈으로 이동</Link></div></div></section>
+  return <section className="auth-section container"><div className="auth-card payment-result-card">{state === 'processing' ? <span className="auth-spinner" aria-hidden="true" /> : <span className={`auth-status-icon ${state === 'error' ? 'error' : 'success'}`}>{state === 'error' ? '!' : '✓'}</span>}<span className="eyebrow">PAYMENT RESULT</span><h1>{title}</h1><p>{message}</p>{state === 'success' && result && <div className="payment-credit-result">{isSubscription && result.subscription ? <><span>멤버십 이용기간</span><strong>{new Date(result.subscription.nextBillingAt).toLocaleDateString('ko-KR')}까지</strong><span>{result.credited?.toLocaleString('ko-KR')} C 지급 완료</span></> : <><span>충전된 크레딧</span><strong>+{result.credited?.toLocaleString('ko-KR')} C</strong></>}<span>현재 잔액 {result.creditBalance?.toLocaleString('ko-KR')} C</span>{result.receiptUrl && <a href={result.receiptUrl} target="_blank" rel="noreferrer">영수증 확인 →</a>}</div>}<div className="payment-result-actions">{state === 'success' && <Link to="/profile/payments" className="button button-full">결제 내역 확인</Link>}<Link to="/store" className={state === 'success' ? 'text-link' : 'button button-full'}>상점으로 돌아가기</Link><Link to="/" className="text-link">홈으로 이동</Link></div></div></section>
 }
 
 export default PaymentResultPage

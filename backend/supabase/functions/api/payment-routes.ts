@@ -28,6 +28,18 @@ class TossApiError extends HttpError {
   }
 }
 
+function tossErrorMessage(code: string): string {
+  const messages: Record<string, string> = {
+    REJECT_CARD_PAYMENT: '카드 결제가 승인되지 않았습니다. 카드 한도와 잔액을 확인하거나 다른 결제수단을 이용해 주세요.',
+    INVALID_REJECT_CARD: '카드 사용이 거절되었습니다. 카드사에 확인하거나 다른 결제수단을 이용해 주세요.',
+    NOT_SUPPORTED_METHOD: '현재 사용할 수 없는 결제수단입니다. 다른 결제수단을 선택해 주세요.',
+    INVALID_API_KEY: '결제 설정을 확인할 수 없습니다. 관리자에게 문의해 주세요.',
+    PROVIDER_ERROR: '결제기관 연결이 원활하지 않습니다. 잠시 후 다시 시도해 주세요.',
+    FAILED_INTERNAL_SYSTEM_PROCESSING: '결제 처리 중 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
+  }
+  return messages[code] || '결제를 처리하지 못했습니다. 결제수단을 확인하거나 잠시 후 다시 시도해 주세요.'
+}
+
 function tossAuthorization(): string {
   return `Basic ${btoa(`${requiredEnv('TOSS_PAYMENTS_SECRET_KEY')}:`)}`
 }
@@ -58,7 +70,8 @@ async function tossRequest<T>(path: string, method: 'GET' | 'POST' | 'DELETE', b
   }
   if (!response.ok) {
     console.error('Toss Payments error:', response.status, data.code, data.message)
-    throw new TossApiError(response.status, String(data.code || ''), String(data.message || '토스페이먼츠 요청을 처리하지 못했습니다.'))
+    const code = String(data.code || '')
+    throw new TossApiError(response.status, code, tossErrorMessage(code))
   }
   return data as T
 }
@@ -307,6 +320,19 @@ export async function paymentRoutes(request: Request, path: string): Promise<Res
     }, 201)
   }
 
+  if (request.method === 'POST' && path === '/payments/fail') {
+    const session = await requireSession(request, 'user')
+    const body = await bodyJson(request)
+    const requestedOrderId = String(body.orderId || '').trim()
+    const failureCode = String(body.code || 'PAYMENT_FAILED').trim().slice(0, 100)
+    if (!/^[A-Za-z0-9_-]{6,64}$/.test(requestedOrderId)) throw new HttpError(400, '결제 주문 정보가 올바르지 않습니다.')
+    const failed = await db.from('payment_orders').update({ status: 'failed', failure_code: failureCode })
+      .eq('order_id', requestedOrderId).eq('user_id', session.id).eq('status', 'pending')
+      .select('order_id').maybeSingle()
+    assertDatabase(failed.error)
+    return json(request, { recorded: Boolean(failed.data) })
+  }
+
   if (request.method === 'POST' && path === '/payments/confirm') {
     const session = await requireSession(request, 'user')
     const body = await bodyJson(request)
@@ -319,7 +345,12 @@ export async function paymentRoutes(request: Request, path: string): Promise<Res
     assertDatabase(order.error)
     if (!order.data || !['credit', 'subscription'].includes(order.data.kind)) throw new HttpError(404, '결제 주문을 찾을 수 없습니다.')
     if (order.data.amount !== amount) throw new HttpError(400, '결제 금액이 주문 금액과 일치하지 않습니다.')
-    if (order.data.status === 'completed') return json(request, { success: true, ...(await accountSummary(session.id)) })
+    if (order.data.status === 'completed') return json(request, {
+      success: true,
+      credited: order.data.credits,
+      receiptUrl: order.data.receipt_url,
+      ...(await accountSummary(session.id)),
+    })
 
     const payment = await confirmPayment(paymentKey, requestedOrderId, order.data.amount)
     if (payment.orderId !== requestedOrderId || payment.totalAmount !== order.data.amount || payment.status !== 'DONE') {
