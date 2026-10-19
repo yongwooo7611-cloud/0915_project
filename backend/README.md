@@ -106,6 +106,8 @@ VITE_TOSS_PAYMENTS_CLIENT_KEY=test_ck_...
 
 동시에 백엔드의 `CORS_ORIGINS`에 실제 Vercel 도메인을 등록하고 Edge Function secret을 다시 설정해야 합니다.
 
+현재 운영 대표 주소는 `https://www.bodramdbo.shop`이며 `https://bodramdbo.shop`은 대표 주소로 리다이렉트됩니다. 두 주소를 모두 `CORS_ORIGINS`와 Supabase Auth Redirect URLs에 등록하고, Supabase Auth Site URL은 대표 주소로 설정합니다.
+
 ## 7. 카카오 로그인 설정
 
 1. 카카오 Developers에서 앱을 만들고 카카오 로그인을 활성화합니다.
