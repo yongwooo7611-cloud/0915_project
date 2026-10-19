@@ -16,6 +16,7 @@ const checks = [
   { path: '/admin/notices', key: 'notices', admin: true },
   { path: '/admin/inquiries', key: 'inquiries', admin: true },
   { path: '/admin/reports', key: 'reports', admin: true },
+  { path: '/admin/payments', key: 'payments', admin: true },
 ]
 
 for (const check of checks) {
@@ -42,6 +43,14 @@ if (userResult.data) {
   const data = await response.json()
   if (!Array.isArray(data.reports)) throw new Error('/reports returned an invalid response.')
   console.log(`/reports (user): ok (${data.reports.length})`)
+
+  const paymentHistory = await fetch(`${baseUrl}/payments/history`, { headers: { Authorization: `Bearer ${userToken}` } })
+  if (!paymentHistory.ok) throw new Error(`/payments/history user check failed (${paymentHistory.status}).`)
+  const paymentData = await paymentHistory.json()
+  if (!Array.isArray(paymentData.payments) || !Array.isArray(paymentData.creditTransactions)) {
+    throw new Error('/payments/history returned an invalid response.')
+  }
+  console.log(`/payments/history (user): ok (${paymentData.payments.length} payments, ${paymentData.creditTransactions.length} credit transactions)`)
 } else {
   console.log('/reports (user): skipped (no users)')
 }

@@ -177,11 +177,26 @@ export async function paymentRoutes(request: Request, path: string): Promise<Res
 
   if (request.method === 'GET' && path === '/payments/history') {
     const session = await requireSession(request, 'user')
-    const orders = await db.from('payment_orders')
-      .select('order_id,kind,product_id,order_name,amount,credits,status,method,receipt_url,approved_at,created_at,canceled_at,canceled_amount,cancel_reason,payment_key')
-      .eq('user_id', session.id).order('created_at', { ascending: false }).limit(100)
-    assertDatabase(orders.error)
-    return json(request, { payments: (orders.data || []).map((order) => paymentHistoryItem(order)) })
+    const [orders, transactions] = await Promise.all([
+      db.from('payment_orders')
+        .select('order_id,kind,product_id,order_name,amount,credits,status,method,receipt_url,approved_at,created_at,canceled_at,canceled_amount,cancel_reason,payment_key')
+        .eq('user_id', session.id).order('created_at', { ascending: false }).limit(100),
+      db.from('credit_transactions')
+        .select('id,amount,reason,balance_after,created_at,admin_id')
+        .eq('user_id', session.id).order('created_at', { ascending: false }).limit(100),
+    ])
+    assertDatabase(orders.error); assertDatabase(transactions.error)
+    return json(request, {
+      payments: (orders.data || []).map((order) => paymentHistoryItem(order)),
+      creditTransactions: (transactions.data || []).map((transaction) => ({
+        id: transaction.id,
+        amount: transaction.amount,
+        reason: transaction.reason,
+        balanceAfter: transaction.balance_after,
+        managedByAdmin: Boolean(transaction.admin_id),
+        createdAt: transaction.created_at,
+      })),
+    })
   }
 
   if (request.method === 'POST' && path === '/payments/orders') {

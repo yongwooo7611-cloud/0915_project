@@ -79,18 +79,89 @@ export async function adminRoutes(request: Request, path: string): Promise<Respo
   }
 
   if (request.method === 'GET' && path === '/admin/users') {
-    const [usersResult, adminsResult] = await Promise.all([
+    const [usersResult, adminsResult, walletsResult] = await Promise.all([
       db.from('user_details').select('id,email,name,nickname,profile_id,created_at,updated_at'),
       db.from('admins').select('id,email,name,created_at,updated_at'),
+      db.from('credit_wallets').select('user_id,balance'),
     ])
-    assertDatabase(usersResult.error); assertDatabase(adminsResult.error)
+    assertDatabase(usersResult.error); assertDatabase(adminsResult.error); assertDatabase(walletsResult.error)
+
+    const balances = new Map((walletsResult.data || []).map((wallet) => [wallet.user_id, wallet.balance]))
 
     const users = [
-      ...(usersResult.data || []).map((user) => ({ ...user, role: 'user' as const })),
+      ...(usersResult.data || []).map((user) => ({ ...user, credit_balance: balances.get(user.id) || 0, role: 'user' as const })),
       ...(adminsResult.data || []).map((admin) => ({ ...admin, nickname: null, profile_id: null, role: 'admin' as const })),
     ].sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
 
     return json(request, { users })
+  }
+
+  if (request.method === 'GET' && path === '/admin/payments') {
+    const [ordersResult, transactionsResult, usersResult, walletsResult, adminsResult] = await Promise.all([
+      db.from('payment_orders').select('id,order_id,user_id,kind,product_id,order_name,amount,credits,status,method,receipt_url,approved_at,created_at,canceled_at,canceled_amount,cancel_reason').order('created_at', { ascending: false }).limit(500),
+      db.from('credit_transactions').select('id,user_id,amount,reason,balance_after,admin_id,payment_order_id,created_at').order('created_at', { ascending: false }).limit(500),
+      db.from('user_details').select('id,email,name,nickname'),
+      db.from('credit_wallets').select('user_id,balance,updated_at'),
+      db.from('admins').select('id,name,email'),
+    ])
+    assertDatabase(ordersResult.error); assertDatabase(transactionsResult.error)
+    assertDatabase(usersResult.error); assertDatabase(walletsResult.error); assertDatabase(adminsResult.error)
+
+    const users = new Map((usersResult.data || []).map((user) => [user.id, user]))
+    const admins = new Map((adminsResult.data || []).map((admin) => [admin.id, admin]))
+    const payments = (ordersResult.data || []).map((order) => ({
+      ...order,
+      user: users.get(order.user_id) || null,
+    }))
+    const creditTransactions = (transactionsResult.data || []).map((transaction) => ({
+      ...transaction,
+      user: users.get(transaction.user_id) || null,
+      admin: transaction.admin_id ? admins.get(transaction.admin_id) || null : null,
+    }))
+    const wallets = (walletsResult.data || []).map((wallet) => ({
+      ...wallet,
+      user: users.get(wallet.user_id) || null,
+    }))
+
+    return json(request, {
+      payments,
+      creditTransactions,
+      wallets,
+      summary: {
+        completedAmount: payments.filter((payment) => payment.status === 'completed').reduce((total, payment) => total + payment.amount, 0),
+        refundedAmount: payments.reduce((total, payment) => total + (payment.canceled_amount || 0), 0),
+        pendingCount: payments.filter((payment) => payment.status === 'pending').length,
+        totalCreditBalance: wallets.reduce((total, wallet) => total + wallet.balance, 0),
+      },
+    })
+  }
+
+  const creditAdjustmentMatch = path.match(/^\/admin\/users\/(\d+)\/credits$/)
+  if (request.method === 'POST' && creditAdjustmentMatch) {
+    const userId = positiveId(creditAdjustmentMatch[1])
+    const body = await bodyJson(request)
+    const action = String(body.action || '')
+    const amount = Number(body.amount)
+    const reason = String(body.reason || '').trim()
+    if (!['grant', 'revoke'].includes(action)) throw new HttpError(400, '크레딧 처리 유형이 올바르지 않습니다.')
+    if (!Number.isSafeInteger(amount) || amount < 1 || amount > 1000000) throw new HttpError(400, '크레딧은 1~1,000,000 사이의 정수로 입력해 주세요.')
+    if (reason.length < 2 || reason.length > 200) throw new HttpError(400, '처리 사유는 2~200자로 입력해 주세요.')
+
+    const adjusted = await db.rpc('adjust_user_credits', {
+      p_user_id: userId,
+      p_amount: action === 'grant' ? amount : -amount,
+      p_reason: reason,
+      p_admin_id: session.id,
+    })
+    if (adjusted.error?.message.includes('insufficient credit balance')) throw new HttpError(409, '보유 크레딧보다 많이 회수할 수 없습니다.')
+    if (adjusted.error?.message.includes('user not found')) throw new HttpError(404, '사용자를 찾을 수 없습니다.')
+    assertDatabase(adjusted.error)
+    return json(request, {
+      message: action === 'grant' ? '크레딧을 지급했습니다.' : '크레딧을 회수했습니다.',
+      userId,
+      balance: adjusted.data?.[0]?.balance || 0,
+      transactionId: adjusted.data?.[0]?.transaction_id,
+    })
   }
 
   if (request.method === 'GET' && path === '/admin/posts') {

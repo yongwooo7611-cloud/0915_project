@@ -6,6 +6,7 @@ import { getTokenExpiration } from '../session'
 const menuItems = [
   { id: 'dashboard', icon: '⌂', label: '대시보드' },
   { id: 'members', icon: '♙', label: '회원 관리' },
+  { id: 'payments', icon: '₩', label: '결제·크레딧' },
   { id: 'posts', icon: '▤', label: '게시글 관리' },
   { id: 'comments', icon: '◌', label: '댓글 관리' },
   { id: 'notices', icon: '◆', label: '공지사항' },
@@ -45,6 +46,8 @@ function AdminDashboardPage() {
   const [notices, setNotices] = useState([])
   const [inquiries, setInquiries] = useState([])
   const [reports, setReports] = useState([])
+  const [paymentData, setPaymentData] = useState({ payments: [], creditTransactions: [], wallets: [], summary: { completedAmount: 0, refundedAmount: 0, pendingCount: 0, totalCreditBalance: 0 } })
+  const [paymentError, setPaymentError] = useState('')
   const [memberError, setMemberError] = useState('')
   const [postError, setPostError] = useState('')
   const [commentError, setCommentError] = useState('')
@@ -61,7 +64,7 @@ function AdminDashboardPage() {
 
     const loadDashboard = async () => {
       const headers = { Authorization: `Bearer ${localStorage.getItem('moa_admin_token')}` }
-      const [dashboardResponse, membersResponse, postsResponse, commentsResponse, noticesResponse, inquiriesResponse, reportsResponse] = await Promise.all([
+      const [dashboardResponse, membersResponse, postsResponse, commentsResponse, noticesResponse, inquiriesResponse, reportsResponse, paymentsResponse] = await Promise.all([
         fetch(apiUrl('/admin/dashboard'), { headers }),
         fetch(apiUrl('/admin/users'), { headers }),
         fetch(apiUrl('/admin/posts'), { headers }),
@@ -69,8 +72,9 @@ function AdminDashboardPage() {
         fetch(apiUrl('/admin/notices'), { headers }),
         fetch(apiUrl('/admin/inquiries'), { headers }),
         fetch(apiUrl('/admin/reports'), { headers }),
+        fetch(apiUrl('/admin/payments'), { headers }),
       ])
-      if ([dashboardResponse, membersResponse, postsResponse, commentsResponse, noticesResponse, inquiriesResponse, reportsResponse].some((response) => response.status === 401)) {
+      if ([dashboardResponse, membersResponse, postsResponse, commentsResponse, noticesResponse, inquiriesResponse, reportsResponse, paymentsResponse].some((response) => response.status === 401)) {
         localStorage.removeItem('moa_admin_token')
         navigate('/admin/login', { replace: true })
         return
@@ -87,6 +91,8 @@ function AdminDashboardPage() {
       if (noticesResponse.ok) setNotices((await noticesResponse.json()).notices)
       if (inquiriesResponse.ok) setInquiries((await inquiriesResponse.json()).inquiries)
       if (reportsResponse.ok) setReports((await reportsResponse.json()).reports)
+      if (paymentsResponse.ok) setPaymentData(await paymentsResponse.json())
+      else setPaymentError((await paymentsResponse.json().catch(() => ({}))).message || '결제 정보를 불러오지 못했습니다.')
     }
     loadDashboard().catch(() => {})
     return () => window.clearTimeout(expirationTimer)
@@ -179,6 +185,7 @@ function AdminDashboardPage() {
   const renderContent = () => {
     if (activeMenu === 'dashboard') return <DashboardOverview dashboard={dashboard} />
     if (activeMenu === 'members') return <ManagementPanel title="회원 관리" description="일반 사용자와 관리자를 한눈에 확인합니다.">{memberError && <p className="admin-error">{memberError}</p>}<AdminMemberTable members={members} /></ManagementPanel>
+    if (activeMenu === 'payments') return <ManagementPanel title="결제·크레딧 관리" description="결제와 환불, 영수증 및 사용자별 크레딧 원장을 관리합니다."><AdminPaymentPanel data={paymentData} setData={setPaymentData} members={members} setMembers={setMembers} error={paymentError} setError={setPaymentError} /></ManagementPanel>
     if (activeMenu === 'posts') return <ManagementPanel title="게시글 관리" description="사용자가 작성한 전체 게시글을 확인하고 관리합니다.">{postError && <p className="admin-error">{postError}</p>}<AdminPostTable posts={adminPosts} onToggleVisibility={updateVisibility} onDelete={deleteAdminPost} showUserEmail /></ManagementPanel>
     if (activeMenu === 'comments') return <ManagementPanel title="댓글 관리" description="전체 댓글을 숨김 또는 삭제할 수 있습니다.">{commentError && <p className="admin-error">{commentError}</p>}<AdminCommentTable comments={adminComments} onToggleVisibility={updateCommentVisibility} onDelete={deleteAdminComment} /></ManagementPanel>
     if (activeMenu === 'notices') return <ManagementPanel title="공지사항" description="메인 화면에 노출할 공지사항을 작성하고 관리합니다."><AdminNoticePanel notices={notices} setNotices={setNotices} /></ManagementPanel>
@@ -189,6 +196,74 @@ function AdminDashboardPage() {
 
   const todayLabel = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'full' }).format(new Date())
   return <div className="admin-shell" lang="ko"><aside className="admin-sidebar"><div className="admin-sidebar-brand"><span>M</span><div>MOA<small>ADMIN CONSOLE</small></div></div><nav translate="no" aria-label="관리자 메뉴">{menuItems.map((item) => <button type="button" className={activeMenu === item.id ? 'active' : ''} onClick={() => setActiveMenu(item.id)} key={item.id}><span aria-hidden="true">{item.icon}</span><b>{item.label}</b></button>)}</nav><div className="admin-sidebar-footer"><div className="admin-user-avatar">{admin.name?.[0] || '관'}</div><div><strong>{admin.name || '관리자'}</strong><small>{admin.email}</small></div><button type="button" onClick={logout} aria-label="로그아웃">↗</button></div></aside><main className="admin-main"><header className="admin-topbar"><div><span translate="no">{menuItems.find((item) => item.id === activeMenu)?.label}</span><small>{todayLabel}</small></div><button type="button" className="admin-notification" aria-label="알림">●</button></header><div className="admin-content">{renderContent()}</div></main></div>
+}
+
+const adminPaymentStatus = { pending: '결제 대기', completed: '승인 완료', failed: '승인 실패', canceled: '취소·환불' }
+const adminCreditReasons = { credit_purchase: '크레딧 구매', subscription_payment: '멤버십 적립', payment_refund: '결제 취소 회수' }
+
+function formatWon(value) {
+  return `${Number(value || 0).toLocaleString('ko-KR')}원`
+}
+
+function formatAdminDate(value) {
+  return value ? new Date(value).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }) : '-'
+}
+
+function AdminPaymentPanel({ data, setData, members, setMembers, error, setError }) {
+  const users = members.filter((member) => member.role === 'user')
+  const [submitting, setSubmitting] = useState(false)
+  const [message, setMessage] = useState('')
+
+  const adjustCredits = async (event) => {
+    event.preventDefault()
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
+    const userId = Number(form.get('userId'))
+    const action = String(form.get('action'))
+    const amount = Number(form.get('amount'))
+    const reason = String(form.get('reason'))
+    setSubmitting(true); setError(''); setMessage('')
+    try {
+      const result = await adminApi(`/admin/users/${userId}/credits`, {
+        method: 'POST', body: JSON.stringify({ action, amount, reason }),
+      })
+      const user = users.find((item) => item.id === userId)
+      const signedAmount = action === 'grant' ? amount : -amount
+      const transaction = {
+        id: result.transactionId,
+        user_id: userId,
+        amount: signedAmount,
+        reason: `${action === 'grant' ? 'admin_grant' : 'admin_revoke'}: ${reason}`,
+        balance_after: result.balance,
+        created_at: new Date().toISOString(),
+        user,
+        admin: JSON.parse(localStorage.getItem('moa_admin') || '{}'),
+      }
+      setData((current) => ({
+        ...current,
+        creditTransactions: [transaction, ...current.creditTransactions],
+        wallets: current.wallets.some((wallet) => wallet.user_id === userId)
+          ? current.wallets.map((wallet) => wallet.user_id === userId ? { ...wallet, balance: result.balance } : wallet)
+          : [{ user_id: userId, balance: result.balance, user }, ...current.wallets],
+        summary: { ...current.summary, totalCreditBalance: current.summary.totalCreditBalance + signedAmount },
+      }))
+      setMembers((current) => current.map((member) => member.role === 'user' && member.id === userId ? { ...member, credit_balance: result.balance } : member))
+      formElement.reset()
+      setMessage(result.message)
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const reasonLabel = (reason) => {
+    if (reason?.startsWith('admin_grant: ')) return `관리자 지급 · ${reason.slice(13)}`
+    if (reason?.startsWith('admin_revoke: ')) return `관리자 회수 · ${reason.slice(14)}`
+    return adminCreditReasons[reason] || reason || '-'
+  }
+
+  return <div className="admin-payment-page">{error && <p className="admin-error">{error}</p>}{message && <p className="admin-success">{message}</p>}<div className="admin-payment-stats"><article><span>승인 결제액</span><strong>{formatWon(data.summary.completedAmount)}</strong></article><article><span>취소·환불액</span><strong>{formatWon(data.summary.refundedAmount)}</strong></article><article><span>결제 대기</span><strong>{data.summary.pendingCount.toLocaleString()}건</strong></article><article><span>전체 보유 크레딧</span><strong>{data.summary.totalCreditBalance.toLocaleString()} C</strong></article></div><section className="admin-credit-control"><div><h3>사용자 크레딧 지급·회수</h3><p>모든 변경은 사유와 관리자 정보가 원장에 기록됩니다.</p></div><form onSubmit={adjustCredits}><label>사용자<select name="userId" required defaultValue=""><option value="" disabled>사용자 선택</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name || user.nickname || user.email} · {user.email} · {Number(user.credit_balance || 0).toLocaleString()} C</option>)}</select></label><label>처리<select name="action" required defaultValue="grant"><option value="grant">지급</option><option value="revoke">회수</option></select></label><label>크레딧<input name="amount" type="number" min="1" max="1000000" step="1" required /></label><label className="admin-credit-reason">처리 사유<input name="reason" maxLength="200" minLength="2" placeholder="이벤트 보상, 오지급 회수 등" required /></label><button type="submit" disabled={submitting}>{submitting ? '처리 중...' : '적용'}</button></form></section><section className="admin-payment-section"><div className="admin-setting-heading"><h3>결제·취소·환불 내역</h3><p>최근 500건의 주문 상태와 영수증을 확인합니다.</p></div><div className="admin-table-wrap"><table className="admin-table admin-payment-table"><thead><tr><th>일시</th><th>사용자</th><th>상품 / 주문번호</th><th>금액</th><th>상태</th><th>결제수단</th><th>영수증</th></tr></thead><tbody>{data.payments.map((payment) => <tr key={payment.id}><td>{formatAdminDate(payment.approved_at || payment.created_at)}</td><td><strong>{payment.user?.name || payment.user?.nickname || '-'}</strong><small>{payment.user?.email || '-'}</small></td><td><strong>{payment.order_name}</strong><small>{payment.order_id}</small>{payment.cancel_reason && <small className="admin-refund-note">{payment.cancel_reason}</small>}</td><td>{formatWon(payment.amount)}{payment.canceled_amount ? <small>환불 {formatWon(payment.canceled_amount)}</small> : null}</td><td><span className={`payment-status ${payment.status}`}>{adminPaymentStatus[payment.status] || payment.status}</span></td><td>{payment.method || '-'}</td><td>{payment.receipt_url ? <a href={payment.receipt_url} target="_blank" rel="noreferrer">보기 ↗</a> : '-'}</td></tr>)}</tbody></table>{data.payments.length === 0 && <p className="list-empty">결제 내역이 없습니다.</p>}</div></section><section className="admin-payment-section"><div className="admin-setting-heading"><h3>크레딧 원장</h3><p>구매, 환불, 관리자 지급·회수 내역을 확인합니다.</p></div><div className="admin-table-wrap"><table className="admin-table admin-credit-table"><thead><tr><th>일시</th><th>사용자</th><th>구분</th><th>증감</th><th>처리 후 잔액</th><th>처리 관리자</th></tr></thead><tbody>{data.creditTransactions.map((transaction) => <tr key={transaction.id}><td>{formatAdminDate(transaction.created_at)}</td><td><strong>{transaction.user?.name || transaction.user?.nickname || '-'}</strong><small>{transaction.user?.email || '-'}</small></td><td>{reasonLabel(transaction.reason)}</td><td><strong className={transaction.amount > 0 ? 'admin-credit-plus' : 'admin-credit-minus'}>{transaction.amount > 0 ? '+' : ''}{transaction.amount.toLocaleString()} C</strong></td><td>{transaction.balance_after == null ? '-' : `${transaction.balance_after.toLocaleString()} C`}</td><td>{transaction.admin?.name || '-'}</td></tr>)}</tbody></table>{data.creditTransactions.length === 0 && <p className="list-empty">크레딧 원장이 비어 있습니다.</p>}</div></section></div>
 }
 
 function AdminNoticePanel({ notices, setNotices }) {
@@ -344,7 +419,7 @@ function ManagementPanel({ title, description, children }) {
 }
 
 function AdminMemberTable({ members }) {
-  return <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>이름</th><th>닉네임</th><th>이메일</th><th>구분</th><th>프로필</th><th>가입일</th></tr></thead><tbody>{members.map((member) => <tr key={`${member.role}-${member.id}`}><td><strong>{member.name || '-'}</strong></td><td>{member.nickname || '-'}</td><td>{member.email}</td><td><span className={`admin-role ${member.role}`}>{member.role === 'admin' ? '관리자' : '일반 사용자'}</span></td><td>{member.role === 'admin' ? '-' : <span className={`admin-profile-state ${member.profile_id ? 'complete' : 'missing'}`}>{member.profile_id ? '등록' : '미등록'}</span>}</td><td>{member.created_at?.slice(0, 10)}</td></tr>)}</tbody></table>{members.length === 0 && <p className="list-empty">등록된 회원이 없습니다.</p>}</div>
+  return <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>이름</th><th>닉네임</th><th>이메일</th><th>구분</th><th>크레딧</th><th>프로필</th><th>가입일</th></tr></thead><tbody>{members.map((member) => <tr key={`${member.role}-${member.id}`}><td><strong>{member.name || '-'}</strong></td><td>{member.nickname || '-'}</td><td>{member.email}</td><td><span className={`admin-role ${member.role}`}>{member.role === 'admin' ? '관리자' : '일반 사용자'}</span></td><td>{member.role === 'admin' ? '-' : `${Number(member.credit_balance || 0).toLocaleString()} C`}</td><td>{member.role === 'admin' ? '-' : <span className={`admin-profile-state ${member.profile_id ? 'complete' : 'missing'}`}>{member.profile_id ? '등록' : '미등록'}</span>}</td><td>{member.created_at?.slice(0, 10)}</td></tr>)}</tbody></table>{members.length === 0 && <p className="list-empty">등록된 회원이 없습니다.</p>}</div>
 }
 
 function AdminCommentTable({ comments, onToggleVisibility, onDelete }) {
