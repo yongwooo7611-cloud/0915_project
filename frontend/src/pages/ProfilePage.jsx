@@ -74,7 +74,7 @@ function ProfilePage() {
   }
 
   const cancelSubscription = async () => {
-    if (!window.confirm('구독을 해지할까요? 다음 결제를 위한 자동결제 수단이 삭제됩니다.')) return
+    if (!window.confirm('멤버십 이용을 종료할까요? 결제 환불은 결제 내역에서 별도로 신청할 수 있습니다.')) return
     setPaymentAction(true)
     setError('')
     try {
@@ -97,7 +97,8 @@ const membershipNames = { sprout: '새싹 멤버십', forest: '숲 멤버십' }
 function PaymentAccountPanel({ account, actionLoading, onCancel }) {
   if (!account) return null
   const active = account.subscription?.status === 'active'
-  return <section className="profile-payment-panel"><div className="profile-payment-heading"><div><span className="eyebrow">PAYMENT & BENEFITS</span><h2>구독과 크레딧</h2></div><Link to="/profile/payments" className="button button-small">결제 내역 보기</Link></div><div className="profile-payment-grid"><article><span>보유 크레딧</span><strong><i>C</i>{account.creditBalance.toLocaleString('ko-KR')}</strong><Link to="/store">크레딧 충전 →</Link></article><article><span>현재 구독</span><strong>{active ? membershipNames[account.subscription.planId] || account.subscription.planId : '이용 중인 구독 없음'}</strong>{active ? <><small>이용기간 종료일 {new Date(account.subscription.nextBillingAt).toLocaleDateString('ko-KR')}</small><button type="button" className="text-button profile-subscription-cancel" onClick={onCancel} disabled={actionLoading}>{actionLoading ? '해지 처리 중...' : '구독 해지'}</button></> : <Link to="/store">멤버십 살펴보기 →</Link>}</article></div></section>
+  const status = { canceled: '해지됨', expired: '이용기간 만료', past_due: '결제 확인 필요' }[account.subscription?.status]
+  return <section className="profile-payment-panel"><div className="profile-payment-heading"><div><span className="eyebrow">PAYMENT & BENEFITS</span><h2>구독과 크레딧</h2></div><Link to="/profile/payments" className="button button-small">결제 내역 보기</Link></div><div className="profile-payment-grid"><article><span>보유 크레딧</span><strong><i>C</i>{account.creditBalance.toLocaleString('ko-KR')}</strong><Link to="/store">크레딧 충전 →</Link></article><article><span>멤버십 상태</span><strong>{active ? membershipNames[account.subscription.planId] || account.subscription.planId : status || '이용 중인 구독 없음'}</strong>{account.subscription && <small>{active ? `이용기간 ${new Date(account.subscription.periodStartedAt).toLocaleDateString('ko-KR')} ~ ${new Date(account.subscription.nextBillingAt).toLocaleDateString('ko-KR')}` : `처리일 ${new Date(account.subscription.canceledAt || account.subscription.nextBillingAt).toLocaleDateString('ko-KR')}`}</small>}{active ? <><small>30일 이용권 · 자동 갱신 없음 · {account.subscription.monthlyCredits.toLocaleString('ko-KR')} C 포함</small><button type="button" className="text-button profile-subscription-cancel" onClick={onCancel} disabled={actionLoading}>{actionLoading ? '해지 처리 중...' : '멤버십 해지'}</button></> : <Link to="/store">멤버십 살펴보기 →</Link>}</article></div></section>
 }
 
 const reportReasons = { spam: '스팸 또는 광고', abuse: '욕설 또는 괴롭힘', obscene: '음란하거나 부적절한 내용', privacy: '개인정보 노출', other: '기타' }

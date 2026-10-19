@@ -26,6 +26,9 @@ for (const check of checks) {
   if (!response.ok) throw new Error(`${check.path} check failed (${response.status}).`)
   const data = await response.json()
   if (!Array.isArray(data[check.key])) throw new Error(`${check.path} returned an invalid response.`)
+  if (check.path === '/admin/payments' && !Array.isArray(data.subscriptions)) {
+    throw new Error('/admin/payments returned an invalid subscriptions response.')
+  }
   console.log(`${check.path}: ok (${data[check.key].length})`)
 }
 
@@ -51,6 +54,16 @@ if (userResult.data) {
     throw new Error('/payments/history returned an invalid response.')
   }
   console.log(`/payments/history (user): ok (${paymentData.payments.length} payments, ${paymentData.creditTransactions.length} credit transactions)`)
+
+  const invalidSubscriptionOrder = await fetch(`${baseUrl}/payments/subscriptions/orders`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${userToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ planId: 'invalid-plan' }),
+  })
+  if (invalidSubscriptionOrder.status !== 400) {
+    throw new Error(`/payments/subscriptions/orders validation check failed (${invalidSubscriptionOrder.status}).`)
+  }
+  console.log('/payments/subscriptions/orders validation: ok')
 } else {
   console.log('/reports (user): skipped (no users)')
 }

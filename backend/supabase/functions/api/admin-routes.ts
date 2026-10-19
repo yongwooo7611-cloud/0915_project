@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs'
 import { auth, db, assertDatabase } from '../_shared/database.ts'
 import { requireSession, signSession } from '../_shared/auth.ts'
 import { bodyJson, HttpError, json, positiveId } from '../_shared/http.ts'
+import { cancelUserSubscription, refundPaymentOrder } from './payment-routes.ts'
 
 type AdminRow = { id: number; auth_user_id: string; email: string; password_hash: string; name: string }
 
@@ -79,17 +80,19 @@ export async function adminRoutes(request: Request, path: string): Promise<Respo
   }
 
   if (request.method === 'GET' && path === '/admin/users') {
-    const [usersResult, adminsResult, walletsResult] = await Promise.all([
+    const [usersResult, adminsResult, walletsResult, subscriptionsResult] = await Promise.all([
       db.from('user_details').select('id,email,name,nickname,profile_id,created_at,updated_at'),
       db.from('admins').select('id,email,name,created_at,updated_at'),
       db.from('credit_wallets').select('user_id,balance'),
+      db.from('subscriptions').select('user_id,plan_id,status,amount,monthly_credits,current_period_started_at,current_period_ends_at,canceled_at,renewal_mode'),
     ])
-    assertDatabase(usersResult.error); assertDatabase(adminsResult.error); assertDatabase(walletsResult.error)
+    assertDatabase(usersResult.error); assertDatabase(adminsResult.error); assertDatabase(walletsResult.error); assertDatabase(subscriptionsResult.error)
 
     const balances = new Map((walletsResult.data || []).map((wallet) => [wallet.user_id, wallet.balance]))
+    const subscriptions = new Map((subscriptionsResult.data || []).map((subscription) => [subscription.user_id, subscription]))
 
     const users = [
-      ...(usersResult.data || []).map((user) => ({ ...user, credit_balance: balances.get(user.id) || 0, role: 'user' as const })),
+      ...(usersResult.data || []).map((user) => ({ ...user, credit_balance: balances.get(user.id) || 0, subscription: subscriptions.get(user.id) || null, role: 'user' as const })),
       ...(adminsResult.data || []).map((admin) => ({ ...admin, nickname: null, profile_id: null, role: 'admin' as const })),
     ].sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
 
@@ -97,21 +100,27 @@ export async function adminRoutes(request: Request, path: string): Promise<Respo
   }
 
   if (request.method === 'GET' && path === '/admin/payments') {
-    const [ordersResult, transactionsResult, usersResult, walletsResult, adminsResult] = await Promise.all([
-      db.from('payment_orders').select('id,order_id,user_id,kind,product_id,order_name,amount,credits,status,method,receipt_url,approved_at,created_at,canceled_at,canceled_amount,cancel_reason').order('created_at', { ascending: false }).limit(500),
+    const [ordersResult, transactionsResult, usersResult, walletsResult, adminsResult, subscriptionsResult] = await Promise.all([
+      db.from('payment_orders').select('id,order_id,user_id,kind,product_id,order_name,amount,credits,status,method,receipt_url,approved_at,created_at,canceled_at,canceled_amount,cancel_reason,payment_key').order('created_at', { ascending: false }).limit(500),
       db.from('credit_transactions').select('id,user_id,amount,reason,balance_after,admin_id,payment_order_id,created_at').order('created_at', { ascending: false }).limit(500),
       db.from('user_details').select('id,email,name,nickname'),
       db.from('credit_wallets').select('user_id,balance,updated_at'),
       db.from('admins').select('id,name,email'),
+      db.from('subscriptions').select('user_id,plan_id,status,amount,monthly_credits,current_period_started_at,current_period_ends_at,canceled_at,renewal_mode,last_payment_order_id').order('updated_at', { ascending: false }),
     ])
     assertDatabase(ordersResult.error); assertDatabase(transactionsResult.error)
-    assertDatabase(usersResult.error); assertDatabase(walletsResult.error); assertDatabase(adminsResult.error)
+    assertDatabase(usersResult.error); assertDatabase(walletsResult.error); assertDatabase(adminsResult.error); assertDatabase(subscriptionsResult.error)
 
     const users = new Map((usersResult.data || []).map((user) => [user.id, user]))
     const admins = new Map((adminsResult.data || []).map((admin) => [admin.id, admin]))
-    const payments = (ordersResult.data || []).map((order) => ({
+    const latestSubscriptionOrders = new Set((subscriptionsResult.data || []).map((subscription) => subscription.last_payment_order_id))
+    const walletBalances = new Map((walletsResult.data || []).map((wallet) => [wallet.user_id, wallet.balance]))
+    const payments = (ordersResult.data || []).map(({ payment_key, ...order }) => ({
       ...order,
       user: users.get(order.user_id) || null,
+      can_refund: order.status === 'completed' && Boolean(payment_key)
+        && (order.kind === 'credit' || latestSubscriptionOrders.has(order.id))
+        && (walletBalances.get(order.user_id) || 0) >= order.credits,
     }))
     const creditTransactions = (transactionsResult.data || []).map((transaction) => ({
       ...transaction,
@@ -127,6 +136,10 @@ export async function adminRoutes(request: Request, path: string): Promise<Respo
       payments,
       creditTransactions,
       wallets,
+      subscriptions: (subscriptionsResult.data || []).map((subscription) => ({
+        ...subscription,
+        user: users.get(subscription.user_id) || null,
+      })),
       summary: {
         completedAmount: payments.filter((payment) => payment.status === 'completed').reduce((total, payment) => total + payment.amount, 0),
         refundedAmount: payments.reduce((total, payment) => total + (payment.canceled_amount || 0), 0),
@@ -134,6 +147,25 @@ export async function adminRoutes(request: Request, path: string): Promise<Respo
         totalCreditBalance: wallets.reduce((total, wallet) => total + wallet.balance, 0),
       },
     })
+  }
+
+  const adminSubscriptionCancelMatch = path.match(/^\/admin\/subscriptions\/(\d+)\/cancel$/)
+  if (request.method === 'POST' && adminSubscriptionCancelMatch) {
+    const userId = positiveId(adminSubscriptionCancelMatch[1])
+    const account = await cancelUserSubscription(userId)
+    return json(request, { message: '사용자의 멤버십을 해지했습니다.', userId, ...account })
+  }
+
+  const adminPaymentRefundMatch = path.match(/^\/admin\/payments\/([A-Za-z0-9_-]{6,64})\/refund$/)
+  if (request.method === 'POST' && adminPaymentRefundMatch) {
+    const body = await bodyJson(request)
+    const reason = String(body.reason || '관리자 승인 환불').trim()
+    if (reason.length < 2 || reason.length > 200) throw new HttpError(400, '환불 사유는 2~200자로 입력해 주세요.')
+    const order = await db.from('payment_orders').select('user_id').eq('order_id', adminPaymentRefundMatch[1]).maybeSingle()
+    assertDatabase(order.error)
+    if (!order.data) throw new HttpError(404, '결제 내역을 찾을 수 없습니다.')
+    const result = await refundPaymentOrder(order.data.user_id, adminPaymentRefundMatch[1], reason)
+    return json(request, { message: '결제를 전액 취소하고 환불했습니다.', ...result })
   }
 
   const creditAdjustmentMatch = path.match(/^\/admin\/users\/(\d+)\/credits$/)

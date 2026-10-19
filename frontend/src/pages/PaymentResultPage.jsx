@@ -26,15 +26,10 @@ function PaymentResultPage() {
     started.current = true
 
     const approve = async () => {
-      const data = type === 'subscription'
-        ? await api('/payments/subscriptions/activate', {
-            method: 'POST',
-            body: JSON.stringify({ planId: params.get('plan'), authKey: params.get('authKey'), customerKey: params.get('customerKey') }),
-          })
-        : await api('/payments/confirm', {
-            method: 'POST',
-            body: JSON.stringify({ paymentKey: params.get('paymentKey'), orderId: params.get('orderId'), amount: Number(params.get('amount')) }),
-          })
+      const data = await api('/payments/confirm', {
+        method: 'POST',
+        body: JSON.stringify({ paymentKey: params.get('paymentKey'), orderId: params.get('orderId'), amount: Number(params.get('amount')) }),
+      })
       setResult(data)
       setState('success')
       setMessage(type === 'subscription' ? '멤버십이 활성화되고 이번 달 크레딧이 적립됐습니다.' : '결제가 승인되고 크레딧이 적립됐습니다.')
