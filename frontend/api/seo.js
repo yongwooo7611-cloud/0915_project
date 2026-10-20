@@ -7,11 +7,25 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character
 const safeJson = (value) => JSON.stringify(value).replace(/</g, '\\u003c')
 let shellCache
 
-async function shell() {
+async function shell(signal) {
   if (shellCache) return shellCache
   // Use this deployment's bundled template. Avoid a second network request to
   // our own domain, cold-start delays, and templates from a different deploy.
-  const html = await readFile(join(process.cwd(), 'dist', 'seo-shell.html'), 'utf8')
+  let html
+  for (const templatePath of [
+    join(process.cwd(), 'dist', 'seo-shell.html'),
+    join(process.cwd(), 'frontend', 'dist', 'seo-shell.html'),
+    new URL('../dist/seo-shell.html', import.meta.url),
+  ]) {
+    try { html = await readFile(templatePath, 'utf8'); break } catch { /* Try the deployment layout or bounded recovery. */ }
+  }
+  if (!html) {
+    const response = await fetch(`${SITE_URL}/seo-shell.html`, {
+      signal: AbortSignal.any([signal, AbortSignal.timeout(2000)]),
+    })
+    if (!response.ok) throw new Error(`HTML shell unavailable: ${response.status}`)
+    html = await response.text()
+  }
   if (!html.includes('<div id="root"></div>')) throw new Error('Invalid HTML shell')
   shellCache = html
   return html
@@ -87,7 +101,7 @@ export default async function handler(request, response) {
   const signal = AbortSignal.timeout(7000)
   try {
     if (path === '/sitemap.xml') return await sitemap(response, signal)
-    const template = await shell()
+    const template = await shell(signal)
     const isPost = /^\/board\/\d+$/.test(path)
     let data = null
     if (path === '/' || path === '/board') data = await publicApi('/posts?page=1', signal)
