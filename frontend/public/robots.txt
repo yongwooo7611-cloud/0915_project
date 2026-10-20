@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+# Private and administrative HTML returns X-Robots-Tag: noindex.
+# Keep those URLs crawlable so compliant search engines can see that directive.
+Disallow: /api/
+
+Sitemap: https://www.bodramdbo.shop/sitemap.xml

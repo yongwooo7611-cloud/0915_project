@@ -25,7 +25,7 @@ export function corsHeaders(request: Request): Record<string, string> {
 export function json(request: Request, body: unknown, status = 200): Response {
   return Response.json(body, {
     status,
-    headers: { ...corsHeaders(request), 'Cache-Control': 'no-store' },
+    headers: { ...corsHeaders(request), 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow, noarchive' },
   })
 }
 

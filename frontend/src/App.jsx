@@ -18,17 +18,21 @@ import PaymentResultPage from './pages/PaymentResultPage'
 import PaymentHistoryPage from './pages/PaymentHistoryPage'
 import SignupPage from './pages/SignupPage'
 import './App.css'
+import Seo from './components/Seo'
+import AboutPage from './pages/AboutPage'
 
 function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <Seo />
         <Routes>
           <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route path="/admin" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route element={<Layout />}>
             <Route path="/" element={<HomePage />} />
+            <Route path="/about" element={<AboutPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/profile" element={<ProfilePage />} />

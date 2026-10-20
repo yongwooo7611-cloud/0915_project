@@ -4,6 +4,7 @@ import { api } from '../api'
 import { useAuth } from '../context/auth'
 import { formatDate } from '../utils'
 import ReportModal from '../components/ReportModal'
+import { applySeo } from '../seo-browser'
 
 function PostDetailPage() {
   const { postId } = useParams()
@@ -29,6 +30,10 @@ function PostDetailPage() {
   }, [postId])
 
   useEffect(loadPost, [loadPost])
+
+  useEffect(() => {
+    if (post && String(post.id) === postId) applySeo(`/board/${postId}`, post)
+  }, [post, postId])
 
   useEffect(() => {
     if (!user || loading || String(post?.id) !== postId) return
