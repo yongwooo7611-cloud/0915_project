@@ -3,6 +3,8 @@ import { postRoutes } from './post-routes.ts'
 import { adminRoutes } from './admin-routes.ts'
 import { communityRoutes } from './community-routes.ts'
 import { paymentRoutes } from './payment-routes.ts'
+import { attachmentRoutes } from './attachment-routes.ts'
+import { backupRoutes } from './backup-routes.ts'
 import { corsHeaders, HttpError, json, routePath } from '../_shared/http.ts'
 
 Deno.serve(async (request) => {
@@ -14,7 +16,9 @@ Deno.serve(async (request) => {
       return json(request, { status: 'ok', runtime: 'supabase-edge', timestamp: new Date().toISOString() })
     }
 
-    const response = await authRoutes(request, path)
+    const response = await backupRoutes(request, path)
+      || await authRoutes(request, path)
+      || await attachmentRoutes(request, path)
       || await postRoutes(request, path)
       || await communityRoutes(request, path)
       || await paymentRoutes(request, path)

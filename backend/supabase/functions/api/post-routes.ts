@@ -1,6 +1,7 @@
 import { db, assertDatabase } from '../_shared/database.ts'
 import { optionalUser, requireSession } from '../_shared/auth.ts'
 import { bodyJson, HttpError, json, positiveId } from '../_shared/http.ts'
+import { attachmentIds, postAttachments, savePost, cleanAttachments } from './attachment-routes.ts'
 
 const PAGE_SIZE = 10
 type PostSummary = {
@@ -58,11 +59,10 @@ export async function postRoutes(request: Request, path: string): Promise<Respon
 
   if (path === '/posts' && request.method === 'POST') {
     const user = await requireSession(request, 'user')
-    const input = postInput(await bodyJson(request))
-    const { data, error } = await db.from('posts').insert({ ...input, user_id: user.id }).select('id').single()
-    assertDatabase(error)
-    if (!data) throw new Error('게시글 생성 결과가 없습니다.')
-    return json(request, { id: data.id }, 201)
+    const body = await bodyJson(request)
+    const input = postInput(body)
+    const id = await savePost(user.id, null, input, attachmentIds(body.attachmentIds || []))
+    return json(request, { id }, 201)
   }
 
   const parsed = parsePostPath(path)
@@ -75,7 +75,7 @@ export async function postRoutes(request: Request, path: string): Promise<Respon
     assertDatabase(error)
     if (!data) throw new HttpError(404, '게시글을 찾을 수 없습니다.')
     if (data.user_id !== user.id) throw new HttpError(403, '작성자만 게시글을 수정할 수 있습니다.')
-    return json(request, { post: serializePost(data) })
+    return json(request, { post: { ...serializePost(data), attachments: await postAttachments(postId) } })
   }
 
   if (suffix === '' && request.method === 'PUT') {
@@ -84,9 +84,10 @@ export async function postRoutes(request: Request, path: string): Promise<Respon
     assertDatabase(findError)
     if (!existing) throw new HttpError(404, '게시글을 찾을 수 없습니다.')
     if (existing.user_id !== user.id) throw new HttpError(403, '작성자만 게시글을 수정할 수 있습니다.')
-    const input = postInput(await bodyJson(request))
-    const { error } = await db.from('posts').update(input).eq('id', postId)
-    assertDatabase(error)
+    const body = await bodyJson(request)
+    const input = postInput(body)
+    const ids = 'attachmentIds' in body ? attachmentIds(body.attachmentIds) : (await postAttachments(postId)).map((file) => file.id)
+    await savePost(user.id, postId, input, ids)
     return json(request, { message: '게시글을 수정했습니다.', id: postId })
   }
 
@@ -98,6 +99,7 @@ export async function postRoutes(request: Request, path: string): Promise<Respon
     if (existing.user_id !== user.id) throw new HttpError(403, '작성자만 게시글을 삭제할 수 있습니다.')
     const { error } = await db.from('posts').delete().eq('id', postId)
     assertDatabase(error)
+    await cleanAttachments().catch((error) => console.error('Deferred attachment cleanup:', error.message))
     return json(request, { message: '게시글을 삭제했습니다.' })
   }
 
@@ -138,7 +140,7 @@ export async function postRoutes(request: Request, path: string): Promise<Respon
       id: comment.id, content: comment.content, createdAt: comment.created_at,
       updatedAt: comment.updated_at, userId: comment.user_id, author: comment.author,
     }))
-    return json(request, { post: { ...serializePost(post), userReaction }, comments })
+    return json(request, { post: { ...serializePost(post), userReaction, attachments: await postAttachments(postId) }, comments })
   }
 
   if (suffix === '/comments' && request.method === 'POST') {

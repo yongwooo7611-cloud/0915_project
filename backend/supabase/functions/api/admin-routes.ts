@@ -3,6 +3,7 @@ import { auth, db, assertDatabase } from '../_shared/database.ts'
 import { requireSession, signSession } from '../_shared/auth.ts'
 import { bodyJson, HttpError, json, positiveId } from '../_shared/http.ts'
 import { cancelUserSubscription, refundPaymentOrder } from './payment-routes.ts'
+import { cleanAttachments } from './attachment-routes.ts'
 
 type AdminRow = { id: number; auth_user_id: string; email: string; password_hash: string; name: string }
 
@@ -319,6 +320,7 @@ export async function adminRoutes(request: Request, path: string): Promise<Respo
     const result = await db.from('posts').delete().eq('id', positiveId(postDelete[1])).select('id').maybeSingle()
     assertDatabase(result.error)
     if (!result.data) throw new HttpError(404, '게시글을 찾을 수 없습니다.')
+    await cleanAttachments().catch((error) => console.error('Deferred attachment cleanup:', error.message))
     return json(request, { message: '게시글을 삭제했습니다.' })
   }
 

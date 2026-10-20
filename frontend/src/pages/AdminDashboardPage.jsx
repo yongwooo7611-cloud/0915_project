@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiUrl } from '../api'
 import { getTokenExpiration } from '../session'
+import AdminBackups from '../components/AdminBackups'
 
 const menuItems = [
   { id: 'dashboard', icon: '⌂', label: '대시보드' },
@@ -191,7 +192,7 @@ function AdminDashboardPage() {
     if (activeMenu === 'notices') return <ManagementPanel title="공지사항" description="메인 화면에 노출할 공지사항을 작성하고 관리합니다."><AdminNoticePanel notices={notices} setNotices={setNotices} /></ManagementPanel>
     if (activeMenu === 'inquiries') return <ManagementPanel title="문의하기" description="사용자 문의를 확인하고 답변합니다."><AdminInquiryPanel inquiries={inquiries} setInquiries={setInquiries} /></ManagementPanel>
     if (activeMenu === 'reports') return <ManagementPanel title="신고 관리" description="접수된 신고를 검토하고 콘텐츠를 제어합니다."><AdminReportPanel reports={reports} setReports={setReports} /></ManagementPanel>
-    return <ManagementPanel title="환경 설정" description="관리자 계정과 커뮤니티 운영 환경을 설정합니다."><AdminSettings admin={admin} onUpdate={setAdmin} /></ManagementPanel>
+    return <ManagementPanel title="환경 설정" description="관리자 계정과 커뮤니티 운영 환경을 설정합니다."><AdminSettings admin={admin} onUpdate={setAdmin} /><AdminBackups /></ManagementPanel>
   }
 
   const todayLabel = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'full' }).format(new Date())

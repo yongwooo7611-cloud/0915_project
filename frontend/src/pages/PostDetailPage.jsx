@@ -5,6 +5,7 @@ import { useAuth } from '../context/auth'
 import { formatDate } from '../utils'
 import ReportModal from '../components/ReportModal'
 import { applySeo } from '../seo-browser'
+import PostAttachments from '../components/PostAttachments'
 
 function PostDetailPage() {
   const { postId } = useParams()
@@ -150,6 +151,7 @@ function PostDetailPage() {
     <article className="article-card">
       <header><span className="tag">{post.category}</span><h1>{post.title}</h1><div className="article-author"><span className="mini-avatar">{post.author[0]}</span><div><strong>{post.author}</strong><p>{formatDate(post.createdAt)} · 조회 {post.views}</p></div></div></header>
       <div className="article-content">{post.content.split('\n').map((line, index) => <p key={index}>{line || <br />}</p>)}</div>
+      <PostAttachments attachments={post.attachments} onRefresh={loadPost} />
       <footer className="article-footer"><div className="reaction-actions"><button type="button" className={post.userReaction === 'like' ? 'active' : ''} disabled={reactionSubmitting} onClick={() => reactToPost('like')} aria-pressed={post.userReaction === 'like'}>좋아요 {post.likes}</button><button type="button" className={post.userReaction === 'dislike' ? 'active dislike' : ''} disabled={reactionSubmitting} onClick={() => reactToPost('dislike')} aria-pressed={post.userReaction === 'dislike'}>싫어요 {post.dislikes}</button></div><span>댓글 {post.comments}</span></footer>
     </article>
     <section className="comments">
