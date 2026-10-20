@@ -1,5 +1,8 @@
 {
   "trailingSlash": false,
+  "functions": {
+    "api/seo.js": { "includeFiles": "dist/seo-shell.html", "maxDuration": 10 }
+  },
   "headers": [
     { "source": "/admin/:path*", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" }] },
     { "source": "/profile/:path*", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" }] },

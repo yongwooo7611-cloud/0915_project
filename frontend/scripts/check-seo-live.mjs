@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict'
 const base = 'https://www.bodramdbo.shop'
+const headers = process.argv.includes('--naver')
+  ? { 'User-Agent': 'Mozilla/5.0 (compatible; Yeti/1.1; +https://naver.me/spd)' }
+  : {}
 const paths = ['/', '/about', '/board', '/store', '/admin', '/admin/login', '/profile/payments', '/sitemap.xml', '/robots.txt', '/branding/favicon-32.png', '/branding/moa-og-v1.jpg', '/board/999999999']
 const results = await Promise.allSettled(paths.map(async (path) => {
-  const response = await fetch(base + path, { signal: AbortSignal.timeout(25000) })
+  const started = Date.now()
+  const response = await fetch(base + path, { headers, signal: AbortSignal.timeout(10000) })
   const type = response.headers.get('content-type') || ''
   const body = type.includes('image') ? '' : await response.text()
   const robots = response.headers.get('x-robots-tag')
-  console.log(JSON.stringify({ path, status: response.status, type, robots, hasBody: body.includes('<main>'), hasSchema: body.includes('seo-structured-data') }))
+  console.log(JSON.stringify({ path, status: response.status, ms: Date.now() - started, type, robots, hasBody: body.includes('<main>'), hasSchema: body.includes('seo-structured-data') }))
   assert.equal(response.status, path === '/board/999999999' ? 404 : 200, path)
   if (['/', '/about', '/board', '/store'].includes(path)) {
     assert(body.includes('<main>'), `${path}: missing server HTML`)
@@ -22,7 +26,7 @@ const results = await Promise.allSettled(paths.map(async (path) => {
     assert(type.includes('xml')); assert(!body.includes('/admin')); assert(!body.includes('/profile'))
     const postUrl = body.match(/<loc>(https:\/\/www\.bodramdbo\.shop\/board\/\d+)<\/loc>/)?.[1]
     if (postUrl) {
-      const postResponse = await fetch(postUrl)
+      const postResponse = await fetch(postUrl, { headers, signal: AbortSignal.timeout(10000) })
       const postHtml = await postResponse.text()
       assert.equal(postResponse.status, 200)
       assert(postHtml.includes('DiscussionForumPosting'))

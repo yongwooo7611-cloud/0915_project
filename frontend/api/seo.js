@@ -1,4 +1,6 @@
 import { ABOUT_SECTIONS, SITE_URL, pageSeo, structuredData } from '../src/seo.js'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 
 const API_URL = (process.env.VITE_API_BASE_URL || 'https://xiovqwfbjavfxinpwirk.supabase.co/functions/v1/api').replace(/\/$/, '')
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character])
@@ -6,17 +8,17 @@ const safeJson = (value) => JSON.stringify(value).replace(/</g, '\\u003c')
 let shellCache
 
 async function shell() {
-  if (shellCache && Date.now() - shellCache.time < 60000) return shellCache.html
-  const response = await fetch(`${SITE_URL}/seo-shell.html`, { signal: AbortSignal.timeout(10000) })
-  if (!response.ok) throw new Error(`HTML shell unavailable: ${response.status}`)
-  const html = await response.text()
+  if (shellCache) return shellCache
+  // Use this deployment's bundled template. Avoid a second network request to
+  // our own domain, cold-start delays, and templates from a different deploy.
+  const html = await readFile(join(process.cwd(), 'dist', 'seo-shell.html'), 'utf8')
   if (!html.includes('<div id="root"></div>')) throw new Error('Invalid HTML shell')
-  shellCache = { time: Date.now(), html }
+  shellCache = html
   return html
 }
 
-async function publicApi(path) {
-  const response = await fetch(`${API_URL}${path}`, { signal: AbortSignal.timeout(10000) })
+async function publicApi(path, signal) {
+  const response = await fetch(`${API_URL}${path}`, { signal })
   if (response.status === 404) return null
   if (!response.ok) throw new Error(`Public API unavailable: ${response.status}`)
   return response.json()
@@ -59,13 +61,13 @@ export function renderHtml(template, path, data, index = true) {
   return html.replace('<div id="root"></div>', `<div id="root">${contentHtml(path, data)}</div>`)
 }
 
-async function sitemap(response) {
+async function sitemap(response, signal) {
   const urls = ['/', '/about', '/board', '/store'].map((path) => `<url><loc>${SITE_URL}${path}</loc></url>`)
   // Query only the anonymous public endpoint; hidden/deleted posts are never included.
   let page = 1
   let totalPages = 1
   do {
-    const data = await publicApi(`/posts?page=${page}`)
+    const data = await publicApi(`/posts?page=${page}`, signal)
     for (const post of data?.posts || []) {
       const timestamp = new Date(post.updatedAt || post.createdAt)
       urls.push(`<url><loc>${SITE_URL}/board/${Number(post.id)}</loc>${Number.isNaN(timestamp.getTime()) ? '' : `<lastmod>${timestamp.toISOString()}</lastmod>`}</url>`)
@@ -80,13 +82,16 @@ async function sitemap(response) {
 export default async function handler(request, response) {
   response.setHeader('Cache-Control', 'private, no-store')
   const path = String(request.query.path || '/').split('?')[0].replace(/\/$/, '') || '/'
+  // A shared deadline covers all upstream calls, including sitemap pagination.
+  // Search engines should receive a retryable response before a 10s timeout.
+  const signal = AbortSignal.timeout(7000)
   try {
-    if (path === '/sitemap.xml') return await sitemap(response)
+    if (path === '/sitemap.xml') return await sitemap(response, signal)
     const template = await shell()
     const isPost = /^\/board\/\d+$/.test(path)
     let data = null
-    if (path === '/' || path === '/board') data = await publicApi('/posts?page=1')
-    else if (isPost) data = await publicApi(`/posts/${path.split('/')[2]}`)
+    if (path === '/' || path === '/board') data = await publicApi('/posts?page=1', signal)
+    else if (isPost) data = await publicApi(`/posts/${path.split('/')[2]}`, signal)
     const publicPage = ['/', '/about', '/board', '/store'].includes(path) || (isPost && data?.post && !data.post.hidden)
     if (!publicPage) response.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive')
     const privatePage = /^\/(admin|profile|auth)(\/|$)/.test(path) || ['/login', '/signup', '/board/new', '/store/payment-result'].includes(path) || /^\/board\/\d+\/edit$/.test(path)
