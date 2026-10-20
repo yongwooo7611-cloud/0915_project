@@ -7,7 +7,7 @@ let shellCache
 
 async function shell() {
   if (shellCache && Date.now() - shellCache.time < 60000) return shellCache.html
-  const response = await fetch(`${SITE_URL}/index.html`, { signal: AbortSignal.timeout(10000) })
+  const response = await fetch(`${SITE_URL}/seo-shell.html`, { signal: AbortSignal.timeout(10000) })
   if (!response.ok) throw new Error(`HTML shell unavailable: ${response.status}`)
   const html = await response.text()
   if (!html.includes('<div id="root"></div>')) throw new Error('Invalid HTML shell')

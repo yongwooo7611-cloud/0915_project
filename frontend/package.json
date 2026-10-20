@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/build-seo.mjs",
     "lint": "oxlint",
     "test:seo": "node scripts/check-seo.mjs",
     "preview": "vite preview"

@@ -2,7 +2,7 @@
 
 Canonical origin: https://www.bodramdbo.shop
 
-Public home, service introduction, board, store, and visible post URLs serve HTML metadata and readable content through `frontend/api/seo.js` before React starts. The same response is served to humans and crawlers. Content comes from the anonymous Supabase API; no service-role key, token, email, or private profile is used. User text is HTML-escaped and JSON-LD escapes `<` to prevent script injection.
+The homepage is prerendered at build time. Service introduction, board, store, and visible post URLs serve HTML metadata and readable content through `frontend/api/seo.js` before React starts, using a non-indexable static `seo-shell.html`. The same response is served to humans and crawlers. Content comes from the anonymous Supabase API; no service-role key, token, email, or private profile is used. User text is HTML-escaped and JSON-LD escapes `<` to prevent script injection.
 
 Private routes (admin, profile, auth, login, signup, post create/edit, payment result) return both robots noindex metadata and X-Robots-Tag. These routes remain crawlable so search engines can observe noindex. Authentication remains the access control. Unknown and missing/hidden post URLs return 404; upstream failures return 503 instead of an indexable empty page. Backend JSON APIs also return noindex headers.
 

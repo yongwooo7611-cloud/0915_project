@@ -7,6 +7,7 @@
     { "source": "/login", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" }] },
     { "source": "/signup", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" }] },
     { "source": "/index.html", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, follow" }] },
+    { "source": "/seo-shell.html", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] },
     { "source": "/store/payment-result", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" }] }
   ],
   "rewrites": [

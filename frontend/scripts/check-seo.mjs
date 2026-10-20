@@ -12,7 +12,7 @@ assert.equal(data['@graph'].at(-1)['@type'], 'DiscussionForumPosting')
 assert.equal(data['@graph'].at(-1).text, post.content)
 
 globalThis.fetch = async (url) => {
-  if (String(url).endsWith('/index.html')) return new Response(template)
+  if (String(url).endsWith('/seo-shell.html')) return new Response(template)
   if (String(url).endsWith('/posts/1')) return Response.json({ post })
   if (String(url).endsWith('/posts/2')) return new Response('{}', { status: 404 })
   if (String(url).includes('/posts?page=')) return Response.json({ posts: [post], pagination: { totalPages: 1 } })
