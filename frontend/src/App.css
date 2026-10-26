@@ -51,7 +51,7 @@
 .hero-section { min-height: 530px; display: grid; place-items: center; background: radial-gradient(circle at 78% 35%, rgba(176,199,177,.65) 0 4%, transparent 4.2%), radial-gradient(circle at 80% 36%, rgba(255,255,255,.55) 0 16%, transparent 16.2%), linear-gradient(125deg, #f3eee2 0 55%, #dce7dc 55% 100%); overflow: hidden; }
 .hero-content { padding: 80px 0; }
 .hero-content h1, .page-heading h1, .auth-heading h1, .profile-info h1, .article-card h1, .empty-state h1 { font-family: var(--serif); color: var(--green-dark); }
-.hero-content h1 { font-size: clamp(calc(42px - 2pt), calc(5vw - 2pt), calc(65px - 2pt)); line-height: 1.25; margin: 18px 0; letter-spacing: -.04em; }
+.hero-content h1 { font-family: inherit; font-size: clamp(calc(42px - 10pt), calc(5vw - 10pt), calc(65px - 10pt)); line-height: 1.25; margin: 18px 0; letter-spacing: -.04em; }
 .hero-content > p { color: #657269; line-height: 1.9; font-size: 16px; }
 .hero-actions { display: flex; gap: 10px; margin-top: 32px; }
 .section { padding-top: 76px; padding-bottom: 90px; }
